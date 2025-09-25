@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,60 +14,53 @@
             font-family: 'Inter', sans-serif;
             @apply bg-slate-100 flex items-center justify-center min-h-screen p-4;
         }
-
         .container-card {
-            @apply bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-xl w-full text-center space-y-6;
+            @apply bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-2xl w-full text-center space-y-6;
         }
-
         #map {
             height: 350px;
             width: 100%;
             @apply rounded-xl border border-gray-200 shadow-md;
         }
-
         .btn {
             @apply w-full py-3 px-6 rounded-lg font-bold text-white transition-colors duration-200 transform hover:scale-105;
         }
-
         /* Message Modal styles */
         .modal-overlay {
             @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 transition-opacity duration-300;
         }
-
         .modal-content {
             @apply bg-white p-6 rounded-lg shadow-xl text-center max-w-sm w-full;
         }
     </style>
 </head>
-
 <body>
     <div class="container-card">
         <h1 class="text-3xl font-bold text-slate-800">Your Current Location</h1>
-
-        <!-- Google Maps API requires an element with an id -->
         <div id="map"></div>
-        
         <div class="flex flex-col sm:flex-row justify-center sm:space-x-4 space-y-4 sm:space-y-0 text-left">
-            <div class="w-full sm:w-1/3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <p class="text-xs font-medium text-gray-500">Latitude:</p>
                 <p id="lat-display" class="text-lg font-bold text-blue-600">--</p>
             </div>
-            <div class="w-full sm:w-1/3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <p class="text-xs font-medium text-gray-500">Longitude:</p>
                 <p id="long-display" class="text-lg font-bold text-blue-600">--</p>
             </div>
-            <div class="w-full sm:w-1/3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <p class="text-xs font-medium text-gray-500">Accuracy:</p>
                 <p id="accuracy-display" class="text-lg font-bold text-green-600">--</p>
             </div>
+            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <p class="text-xs font-medium text-gray-500">Distance:</p>
+                <p id="distance-display" class="text-lg font-bold text-purple-600">0.00 km</p>
+            </div>
         </div>
-
         <button id="find-me-btn" class="btn bg-blue-600 hover:bg-blue-700">Find My Location</button>
-        <button id="track-me-btn" class="btn bg-green-600 hover:bg-green-700">Start Live Tracking</button>
+        <button id="track-me-btn" class="btn bg-green-600 hover:bg-green-700">Start Live Tracking & Record Path</button>
         <button id="stop-tracking-btn" class="btn bg-red-600 hover:bg-red-700 hidden">Stop Live Tracking</button>
-
+        <button id="clear-path-btn" class="btn bg-gray-500 hover:bg-gray-600">Clear My Path</button>
     </div>
-
     <!-- Message Modal -->
     <div id="message-modal" class="modal-overlay hidden opacity-0">
         <div class="modal-content">
@@ -77,14 +69,15 @@
             <button id="modal-close-btn" class="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">OK</button>
         </div>
     </div>
-    
     <script>
         const latDisplay = document.getElementById('lat-display');
         const longDisplay = document.getElementById('long-display');
         const accuracyDisplay = document.getElementById('accuracy-display');
+        const distanceDisplay = document.getElementById('distance-display');
         const findMeBtn = document.getElementById('find-me-btn');
         const trackMeBtn = document.getElementById('track-me-btn');
         const stopTrackingBtn = document.getElementById('stop-tracking-btn');
+        const clearPathBtn = document.getElementById('clear-path-btn');
         const messageModal = document.getElementById('message-modal');
         const modalTitle = document.getElementById('modal-title');
         const modalMessage = document.getElementById('modal-message');
@@ -93,6 +86,10 @@
         let map;
         let marker;
         let watchId;
+        let accuracyCircle;
+        let pathPolyline;
+        let pathCoordinates = []; // Array to store the path points
+        let totalDistanceKm = 0;
 
         // Helper function to show the modal
         function showMessage(title, message) {
@@ -112,22 +109,41 @@
         function initMap() {
             const defaultLat = 0;
             const defaultLng = 0;
-            
+
             map = new google.maps.Map(document.getElementById("map"), {
                 zoom: 2,
                 center: { lat: defaultLat, lng: defaultLng },
             });
-            
+
             marker = new google.maps.Marker({
                 map: map,
                 position: { lat: defaultLat, lng: defaultLng },
                 title: "Your Location"
             });
-            
+
             // Add event listeners once the map is ready
             findMeBtn.addEventListener('click', findMyCurrentLocation);
             trackMeBtn.addEventListener('click', startLiveTracking);
             stopTrackingBtn.addEventListener('click', stopLiveTracking);
+            clearPathBtn.addEventListener('click', clearPath);
+        }
+
+        // --- Haversine Formula for Distance Calculation ---
+        // Calculates the distance between two lat/lng coordinates in kilometers.
+        function calculateDistance(coord1, coord2) {
+            const R = 6371e3; // metres
+            const φ1 = coord1.lat * Math.PI/180; // φ, λ in radians
+            const φ2 = coord2.lat * Math.PI/180;
+            const Δφ = (coord2.lat-coord1.lat) * Math.PI/180;
+            const Δλ = (coord2.lng-coord1.lng) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            const d = R * c; // in metres
+            return d / 1000; // Return in kilometers
         }
 
         // Function to update the map with new coordinates and accuracy
@@ -135,17 +151,57 @@
             const { latitude, longitude, accuracy } = position.coords;
             const newPosition = { lat: latitude, lng: longitude };
             
+            // Check if we have previous points to calculate distance
+            if (watchId && pathCoordinates.length > 0) {
+                const lastPosition = pathCoordinates[pathCoordinates.length - 1];
+                const segmentDistance = calculateDistance(lastPosition, newPosition);
+                totalDistanceKm += segmentDistance;
+                distanceDisplay.innerText = `${totalDistanceKm.toFixed(2)} km`;
+            }
+
             map.setCenter(newPosition);
             marker.setPosition(newPosition);
-            
+
+            // Create or update the accuracy circle
+            if (!accuracyCircle) {
+                accuracyCircle = new google.maps.Circle({
+                    strokeColor: '#4A90E2',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: '#4A90E2',
+                    fillOpacity: 0.2,
+                    map: map,
+                    center: newPosition,
+                    radius: accuracy // Radius in meters
+                });
+            } else {
+                accuracyCircle.setCenter(newPosition);
+                accuracyCircle.setRadius(accuracy);
+            }
+
             latDisplay.innerText = latitude.toFixed(6);
             longDisplay.innerText = longitude.toFixed(6);
             accuracyDisplay.innerText = `${accuracy.toFixed(2)} m`;
+
+            // Update the path when tracking is active
+            if (watchId) {
+                pathCoordinates.push(newPosition);
+                if (!pathPolyline) {
+                    pathPolyline = new google.maps.Polyline({
+                        path: pathCoordinates,
+                        geodesic: true,
+                        strokeColor: '#FF0000',
+                        strokeOpacity: 1.0,
+                        strokeWeight: 4,
+                    });
+                    pathPolyline.setMap(map);
+                } else {
+                    pathPolyline.setPath(pathCoordinates);
+                }
+            }
         }
 
         // --- Geolocation Logic ---
-
-        // Function for a single location lookup
         function findMyCurrentLocation() {
             if ("geolocation" in navigator) {
                 latDisplay.innerText = 'Finding...';
@@ -161,7 +217,7 @@
                         let errorMessage = "An unknown error occurred.";
                         switch(error.code) {
                             case error.PERMISSION_DENIED:
-                                errorMessage = "You denied the request for Geolocation. Please enable it in your browser settings.";
+                                errorMessage = "You denied the request for Geolocation.";
                                 break;
                             case error.POSITION_UNAVAILABLE:
                                 errorMessage = "Location information is unavailable.";
@@ -181,7 +237,7 @@
                 showMessage("Feature Not Supported", "Your browser does not support geolocation.");
             }
         }
-        
+
         // Function to start live tracking
         function startLiveTracking() {
             if ("geolocation" in navigator) {
@@ -192,6 +248,14 @@
                 latDisplay.innerText = 'Tracking...';
                 longDisplay.innerText = 'Tracking...';
                 accuracyDisplay.innerText = '...';
+                distanceDisplay.innerText = '0.00 km';
+
+                // Clear the previous path before starting a new one
+                pathCoordinates = [];
+                totalDistanceKm = 0;
+                if (pathPolyline) {
+                    pathPolyline.setPath([]);
+                }
 
                 watchId = navigator.geolocation.watchPosition(
                     (position) => {
@@ -200,7 +264,19 @@
                     (error) => {
                         console.error("Geolocation Watch Error:", error);
                         stopLiveTracking();
-                        showMessage("Tracking Error", "Live tracking failed. Please try again.");
+                        let errorMessage = "An unknown tracking error occurred.";
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = "You denied the request for Geolocation to track your location.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = "Location information is unavailable for tracking.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = "The request to track your location timed out.";
+                                break;
+                        }
+                        showMessage("Tracking Error", errorMessage);
                     },
                     { enableHighAccuracy: true }
                 );
@@ -208,7 +284,7 @@
                 showMessage("Feature Not Supported", "Your browser does not support geolocation.");
             }
         }
-        
+
         // Function to stop live tracking
         function stopLiveTracking() {
             if (watchId) {
@@ -222,9 +298,19 @@
                 showMessage("Tracking Stopped", "Live location tracking has been stopped.");
             }
         }
+        
+        // Function to clear the path from the map
+        function clearPath() {
+            pathCoordinates = [];
+            totalDistanceKm = 0;
+            if (pathPolyline) {
+                pathPolyline.setPath([]);
+            }
+            distanceDisplay.innerText = '0.00 km';
+            showMessage("Path Cleared", "The visual path on the map and the distance have been erased.");
+        }
     </script>
     <!-- Load the Google Maps API script -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDCBD8y02er5VSinumFXBmAFEtsg2oYz9I&callback=initMap" async defer></script>
 </body>
-
 </html>
