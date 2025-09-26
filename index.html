@@ -155,7 +155,7 @@
         const infoWindows = {}; // Object to store Google Maps InfoWindow instances
         let isMapCentered = false; // Flag to force map centering and zooming on location start
         
-        // --- NEW GLOBAL OBJECTS FOR PATH TRACKING ---
+        // --- GLOBAL OBJECTS FOR PATH TRACKING ---
         /** @type {Object<string, google.maps.Polyline>} */
         const userPolylines = {}; // { userId: PolylineInstance }
         /** @type {Object<string, Array<{lat: number, lng: number}>>} */
@@ -188,21 +188,21 @@
         const registerShowPassword = document.getElementById('register-show-password');
         const registerError = document.getElementById('register-error');
 
-        // --- Custom Google Maps Icon Definitions ---
+        // --- Custom Google Maps Icon Definitions (All Red, Self is Brighter/Larger) ---
         const MY_MARKER_ICON = {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#ef4444', // red-500
+            fillColor: '#ef4444', // Bright Red (red-500)
             fillOpacity: 1,
             strokeWeight: 4,
-            strokeColor: '#fecaca', // red-200
+            strokeColor: '#fecaca', // Light Pink/Red outline
             scale: 8, // Larger size for self
         };
         const OTHER_MARKER_ICON = {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#3b82f6', // blue-500
+            fillColor: '#dc2626', // Darker Red (red-600)
             fillOpacity: 1,
             strokeWeight: 2,
-            strokeColor: '#93c5fd', // blue-300
+            strokeColor: '#fca5a5', // Lighter Red outline
             scale: 6, // Standard size for others
         };
 
@@ -274,7 +274,7 @@
                 app = initializeApp(userProvidedFirebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                analytics = getAnalytics(app); // Initialize Analytics
+                getAnalytics(app); // Initialize Analytics
 
                 // Set up auth state change listener
                 onAuthStateChanged(auth, async (user) => {
@@ -285,14 +285,13 @@
                         userIdDisplay.textContent = `User: ${displayIdentifier}`;
                         console.log("Firebase Auth Ready. User ID:", userId);
                         
-                        // If signed in via email/password, ensure we don't try to sign in anonymously
+                        // Handle custom token sign-in logic for Canvas environment
                         if (!user.isAnonymous && initialAuthToken) {
-                             // Do nothing if user is already authenticated
+                             // User signed in via email/password, continue
                         } else if (user.isAnonymous && initialAuthToken) {
                             // If signed in anonymously but initial token exists, sign in with token
                             await signInWithCustomToken(auth, initialAuthToken);
-                            // The listener will re-run on successful token sign-in
-                            return;
+                            return; // Wait for the listener to re-run
                         }
 
                         // UI for Authenticated user
@@ -419,7 +418,7 @@
                     lat: lat,
                     lng: lng,
                     timestamp: new Date().getTime(),
-                    // Store display name first for map identification, fallback to email or UID
+                    // Store display name for map identification, fallback to email or UID
                     displayId: auth.currentUser.displayName || auth.currentUser.email || userId,
                     isTracking: true
                 };
@@ -537,7 +536,8 @@
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
                     const targetUserId = change.doc.id;
-                    const displayId = data.displayId || targetUserId; // Use stored display name/email/UID
+                    // Use stored display name/email/UID for the display identifier
+                    const displayId = data.displayId || targetUserId; 
 
                     if (change.type === "removed" || !data.isTracking) {
                         // Document removed (user stopped tracking)
@@ -565,14 +565,15 @@
             const position = { lat: lat, lng: lng };
             const icon = isSelf ? MY_MARKER_ICON : OTHER_MARKER_ICON;
             const timeString = new Date(timestamp).toLocaleTimeString();
+            const markerTitle = isSelf ? `👑 Your Location (You: ${displayId})` : `📍 User: ${displayId}`;
+
 
             // InfoWindow Content now prominently displays the username (displayId)
             const popupContent = `
                 <div class="p-1">
-                    <div class="text-sm font-semibold">${isSelf ? '👑 Your Location (You)' : '📍 User: ' + displayId}</div>
-                    <div class="text-xs text-gray-500">ID: ${id}</div>
-                    <div class="text-xs text-gray-500">Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}</div>
+                    <div class="text-sm font-semibold">${markerTitle}</div>
                     <div class="text-xs text-gray-500">Last Seen: ${timeString}</div>
+                    <div class="text-xs text-gray-500">Lat/Lng: ${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
                 </div>
             `;
 
@@ -581,15 +582,16 @@
 
             // 1. Marker Logic (Create/Update Marker Position)
             if (marker) {
-                // Marker exists, update position and icon
+                // Marker exists, update position and icon/title
                 marker.setPosition(position);
                 marker.setIcon(icon);
+                marker.setTitle(markerTitle);
             } else {
                 // Marker does not exist, create new one
                 marker = new google.maps.Marker({
                     position: position,
                     map: map,
-                    title: isSelf ? 'Your Location' : 'User: ' + displayId, // Title shows the name
+                    title: markerTitle, // Title shows the name
                     icon: icon,
                 });
 
@@ -627,8 +629,8 @@
             
             // Add the new position to the user's path history (preventing duplicates if location hasn't changed)
             const lastPos = userPaths[id][userPaths[id].length - 1];
-            // Check if position is different enough (e.g., if we were storing more points, this check would be more complex)
-            const isDifferent = !lastPos || (lastPos.lat !== lat || lastPos.lng !== lng);
+            // Check if position is different enough 
+            const isDifferent = !lastPos || (lastPos.lat.toFixed(6) !== lat.toFixed(6) || lastPos.lng.toFixed(6) !== lng.toFixed(6));
             
             if (isDifferent) {
                 userPaths[id].push(position);
@@ -737,7 +739,6 @@
 
         // Password visibility toggles
         loginShowPassword.addEventListener('change', () => togglePasswordVisibility('login'));
-        registerShowPassword.addEventListener('change', () => togglePasswordVisibility('login')); // Fixed type parameter
         registerShowPassword.addEventListener('change', () => togglePasswordVisibility('register'));
 
         // Initialize map and Firebase when the window loads
