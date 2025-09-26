@@ -3,314 +3,755 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Location Tracker</title>
-    <!-- Tailwind CSS for a modern, responsive look -->
+    <title>Real-Time Location Share (Google Maps)</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
+        /* Custom styles for the map container */
+        #map {
+            height: calc(100vh - 120px); /* Full height minus header/controls area */
+            width: 100%;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
         body {
             font-family: 'Inter', sans-serif;
-            @apply bg-slate-100 flex items-center justify-center min-h-screen p-4;
+            background-color: #f7f9fb;
         }
-        .container-card {
-            @apply bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-2xl w-full text-center space-y-6;
-        }
-        #map {
-            height: 350px;
-            width: 100%;
-            @apply rounded-xl border border-gray-200 shadow-md;
-        }
-        .btn {
-            @apply w-full py-3 px-6 rounded-lg font-bold text-white transition-colors duration-200 transform hover:scale-105;
-        }
-        /* Message Modal styles */
-        .modal-overlay {
-            @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 transition-opacity duration-300;
-        }
-        .modal-content {
-            @apply bg-white p-6 rounded-lg shadow-xl text-center max-w-sm w-full;
+        .auth-container {
+            height: calc(100vh - 120px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
     </style>
+    <!-- Google Maps API Script -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDCBD8y02er5VSinumFXBmAFEtsg2oYz9I"></script>
 </head>
-<body>
-    <div class="container-card">
-        <h1 class="text-3xl font-bold text-slate-800">Your Current Location</h1>
-        <div id="map"></div>
-        <div class="flex flex-col sm:flex-row justify-center sm:space-x-4 space-y-4 sm:space-y-0 text-left">
-            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p class="text-xs font-medium text-gray-500">Latitude:</p>
-                <p id="lat-display" class="text-lg font-bold text-blue-600">--</p>
-            </div>
-            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p class="text-xs font-medium text-gray-500">Longitude:</p>
-                <p id="long-display" class="text-lg font-bold text-blue-600">--</p>
-            </div>
-            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p class="text-xs font-medium text-gray-500">Accuracy:</p>
-                <p id="accuracy-display" class="text-lg font-bold text-green-600">--</p>
-            </div>
-            <div class="w-full sm:w-1/4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p class="text-xs font-medium text-gray-500">Distance:</p>
-                <p id="distance-display" class="text-lg font-bold text-purple-600">0.00 km</p>
-            </div>
-        </div>
-        <button id="find-me-btn" class="btn bg-blue-600 hover:bg-blue-700">Find My Location</button>
-        <button id="track-me-btn" class="btn bg-green-600 hover:bg-green-700">Start Live Tracking & Record Path</button>
-        <button id="stop-tracking-btn" class="btn bg-red-600 hover:bg-red-700 hidden">Stop Live Tracking</button>
-        <button id="clear-path-btn" class="btn bg-gray-500 hover:bg-gray-600">Clear My Path</button>
-    </div>
-    <!-- Message Modal -->
-    <div id="message-modal" class="modal-overlay hidden opacity-0">
-        <div class="modal-content">
-            <h3 id="modal-title" class="text-xl font-bold mb-2"></h3>
-            <p id="modal-message" class="text-gray-700 mb-6"></p>
-            <button id="modal-close-btn" class="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">OK</button>
-        </div>
-    </div>
-    <script>
-        const latDisplay = document.getElementById('lat-display');
-        const longDisplay = document.getElementById('long-display');
-        const accuracyDisplay = document.getElementById('accuracy-display');
-        const distanceDisplay = document.getElementById('distance-display');
-        const findMeBtn = document.getElementById('find-me-btn');
-        const trackMeBtn = document.getElementById('track-me-btn');
-        const stopTrackingBtn = document.getElementById('stop-tracking-btn');
-        const clearPathBtn = document.getElementById('clear-path-btn');
-        const messageModal = document.getElementById('message-modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalMessage = document.getElementById('modal-message');
-        const modalCloseBtn = document.getElementById('modal-close-btn');
+<body class="p-4 md:p-6">
 
+    <header class="mb-4 flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-lg">
+        <h1 class="text-2xl font-extrabold text-gray-800 mb-2 md:mb-0">
+            <svg class="inline w-6 h-6 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            Real-Time Location Share
+        </h1>
+        <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
+            <span id="user-id-display" class="text-xs font-mono text-gray-500 bg-gray-100 p-2 rounded-lg truncate w-full sm:w-auto">
+                Connecting...
+            </span>
+            <button id="logout-btn" class="hidden w-full sm:w-auto px-4 py-2 text-white bg-gray-500 hover:bg-gray-600 font-semibold rounded-lg transition duration-150 ease-in-out shadow-md">
+                Logout
+            </button>
+            <button id="toggle-tracking-btn" class="hidden w-full sm:w-auto px-4 py-2 text-white font-semibold rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" disabled>
+                Start Sharing Location
+            </button>
+        </div>
+    </header>
+
+    <!-- Map container (Hidden until authenticated) -->
+    <div id="map" class="hidden"></div>
+
+    <!-- Authentication Forms Container -->
+    <div id="auth-container" class="auth-container">
+        <!-- Login Form -->
+        <div id="login-card" class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md transition duration-300">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">Login</h2>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="login-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4 relative">
+                    <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="login-password" required minlength="6" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    <div class="mt-2 flex items-center">
+                        <input type="checkbox" id="login-show-password" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                        <label for="login-show-password" class="ml-2 block text-sm text-gray-900">Show Password</label>
+                    </div>
+                </div>
+                <p id="login-error" class="text-red-500 text-sm mb-4 hidden"></p>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition duration-150 shadow-md">
+                    Log In
+                </button>
+            </form>
+            <p class="mt-4 text-center text-sm text-gray-600">
+                Don't have an account? <button id="switch-to-register" class="text-blue-600 hover:text-blue-700 font-medium">Register here</button>
+            </p>
+        </div>
+
+        <!-- Registration Form (Initially Hidden) -->
+        <div id="register-card" class="hidden bg-white p-8 rounded-xl shadow-2xl w-full max-w-md transition duration-300">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">Register</h2>
+            <form id="register-form">
+                <!-- USERNAME FIELD -->
+                <div class="mb-4">
+                    <label for="register-username" class="block text-sm font-medium text-gray-700">Username</label>
+                    <input type="text" id="register-username" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <!-- END USERNAME FIELD -->
+                <div class="mb-4">
+                    <label for="register-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="register-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4 relative">
+                    <label for="register-password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="register-password" required minlength="6" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4 relative">
+                    <label for="register-confirm-password" class="block text-sm font-medium text-gray-700">Confirm Password</label>
+                    <input type="password" id="register-confirm-password" required minlength="6" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    <div class="mt-2 flex items-center">
+                        <input type="checkbox" id="register-show-password" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                        <label for="register-show-password" class="ml-2 block text-sm text-gray-900">Show Passwords</label>
+                    </div>
+                </div>
+                <p id="register-error" class="text-red-500 text-sm mb-4 hidden"></p>
+                <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition duration-150 shadow-md">
+                    Register
+                </button>
+            </form>
+            <p class="mt-4 text-center text-sm text-gray-600">
+                Already have an account? <button id="switch-to-login" class="text-blue-600 hover:text-blue-700 font-medium">Log in here</button>
+            </p>
+        </div>
+    </div>
+
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
+
+        // IMPORTANT: Set debug logging for Firestore
+        setLogLevel('Debug');
+
+        // Hardcoded Firebase configuration provided by the user (overrides __firebase_config)
+        const userProvidedFirebaseConfig = {
+            apiKey: "AIzaSyCbr-2Hvxg4AEfFb51lGoYYepxLOie4JiQ",
+            authDomain: "track-your-journey.firebaseapp.com",
+            projectId: "track-your-journey",
+            storageBucket: "track-your-journey.firebasestorage.app",
+            messagingSenderId: "766067811321",
+            appId: "1:766067811321:web:0dadf42158bc72cafb9328",
+            measurementId: "G-BS033MFRVY"
+        };
+
+        // Global variables required by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth, analytics;
+        let userId = 'anonymous'; // Default value, updated on successful auth
+        /** @type {google.maps.Map} */
         let map;
-        let marker;
-        let watchId;
-        let accuracyCircle;
-        let pathPolyline;
-        let pathCoordinates = []; // Array to store the path points
-        let totalDistanceKm = 0;
+        let isTracking = false;
+        let watchId = null;
+        /** @type {Object<string, google.maps.Marker>} */
+        const userMarkers = {}; // Object to store Google Maps markers: { userId: markerInstance }
+        /** @type {Object<string, google.maps.InfoWindow>} */
+        const infoWindows = {}; // Object to store Google Maps InfoWindow instances
+        let isMapCentered = false; // Flag to force map centering and zooming on location start
+        
+        // --- NEW GLOBAL OBJECTS FOR PATH TRACKING ---
+        /** @type {Object<string, google.maps.Polyline>} */
+        const userPolylines = {}; // { userId: PolylineInstance }
+        /** @type {Object<string, Array<{lat: number, lng: number}>>} */
+        const userPaths = {};     // { userId: [{lat, lng}, ...] }
+        // -------------------------------------------
 
-        // Helper function to show the modal
-        function showMessage(title, message) {
-            modalTitle.innerText = title;
-            modalMessage.innerText = message;
-            messageModal.classList.remove('hidden', 'opacity-0');
-            messageModal.classList.add('flex', 'opacity-100');
-        }
 
-        // Helper function to hide the modal
-        modalCloseBtn.addEventListener('click', () => {
-            messageModal.classList.remove('flex', 'opacity-100');
-            messageModal.classList.add('hidden', 'opacity-0');
-        });
+        // --- DOM Elements ---
+        const toggleBtn = document.getElementById('toggle-tracking-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const mapContainer = document.getElementById('map');
+        const authContainer = document.getElementById('auth-container');
+        const loginCard = document.getElementById('login-card');
+        const registerCard = document.getElementById('register-card');
 
-        // This function is the callback for the Google Maps API script.
-        function initMap() {
-            const defaultLat = 0;
-            const defaultLng = 0;
+        // Login Form Elements
+        const loginForm = document.getElementById('login-form');
+        const loginEmail = document.getElementById('login-email');
+        const loginPassword = document.getElementById('login-password');
+        const loginShowPassword = document.getElementById('login-show-password');
+        const loginError = document.getElementById('login-error');
 
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 2,
-                center: { lat: defaultLat, lng: defaultLng },
-            });
+        // Registration Form Elements
+        const registerForm = document.getElementById('register-form');
+        const registerUsername = document.getElementById('register-username'); // Added Username Input
+        const registerEmail = document.getElementById('register-email');
+        const registerPassword = document.getElementById('register-password');
+        const registerConfirmPassword = document.getElementById('register-confirm-password');
+        const registerShowPassword = document.getElementById('register-show-password');
+        const registerError = document.getElementById('register-error');
 
-            marker = new google.maps.Marker({
-                map: map,
-                position: { lat: defaultLat, lng: defaultLng },
-                title: "Your Location"
-            });
+        // --- Custom Google Maps Icon Definitions ---
+        const MY_MARKER_ICON = {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: '#ef4444', // red-500
+            fillOpacity: 1,
+            strokeWeight: 4,
+            strokeColor: '#fecaca', // red-200
+            scale: 8, // Larger size for self
+        };
+        const OTHER_MARKER_ICON = {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: '#3b82f6', // blue-500
+            fillOpacity: 1,
+            strokeWeight: 2,
+            strokeColor: '#93c5fd', // blue-300
+            scale: 6, // Standard size for others
+        };
 
-            // Add event listeners once the map is ready
-            findMeBtn.addEventListener('click', findMyCurrentLocation);
-            trackMeBtn.addEventListener('click', startLiveTracking);
-            stopTrackingBtn.addEventListener('click', stopLiveTracking);
-            clearPathBtn.addEventListener('click', clearPath);
-        }
 
-        // --- Haversine Formula for Distance Calculation ---
-        // Calculates the distance between two lat/lng coordinates in kilometers.
-        function calculateDistance(coord1, coord2) {
-            const R = 6371e3; // metres
-            const φ1 = coord1.lat * Math.PI/180; // φ, λ in radians
-            const φ2 = coord2.lat * Math.PI/180;
-            const Δφ = (coord2.lat-coord1.lat) * Math.PI/180;
-            const Δλ = (coord2.lng-coord1.lng) * Math.PI/180;
+        // --- Utility Functions ---
 
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        /**
+         * Safely gets the Firestore document path for a public collection.
+         * @param {string} collectionName
+         * @returns {string} The full path.
+         */
+        const getPublicCollectionPath = (collectionName) => {
+            // This path ensures data is publicly shared among all users of this app.
+            return `/artifacts/${appId}/public/data/${collectionName}`;
+        };
 
-            const d = R * c; // in metres
-            return d / 1000; // Return in kilometers
-        }
-
-        // Function to update the map with new coordinates and accuracy
-        function updateMap(position) {
-            const { latitude, longitude, accuracy } = position.coords;
-            const newPosition = { lat: latitude, lng: longitude };
-            
-            // Check if we have previous points to calculate distance
-            if (watchId && pathCoordinates.length > 0) {
-                const lastPosition = pathCoordinates[pathCoordinates.length - 1];
-                const segmentDistance = calculateDistance(lastPosition, newPosition);
-                totalDistanceKm += segmentDistance;
-                distanceDisplay.innerText = `${totalDistanceKm.toFixed(2)} km`;
+        /**
+         * Toggles the visibility of the main app content (map) and the authentication forms.
+         * @param {boolean} isAuthenticated
+         */
+        const toggleAppUI = (isAuthenticated) => {
+            if (isAuthenticated) {
+                mapContainer.classList.remove('hidden');
+                toggleBtn.classList.remove('hidden');
+                logoutBtn.classList.remove('hidden');
+                authContainer.classList.add('hidden');
+            } else {
+                mapContainer.classList.add('hidden');
+                toggleBtn.classList.add('hidden');
+                logoutBtn.classList.add('hidden');
+                authContainer.classList.remove('hidden');
             }
+        };
 
-            map.setCenter(newPosition);
-            marker.setPosition(newPosition);
+        /**
+         * Toggles password field types for show/hide functionality.
+         * @param {string} type - 'login' or 'register'
+         */
+        const togglePasswordVisibility = (type) => {
+            if (type === 'login') {
+                loginPassword.type = loginShowPassword.checked ? 'text' : 'password';
+            } else if (type === 'register') {
+                const isChecked = registerShowPassword.checked;
+                registerPassword.type = isChecked ? 'text' : 'password';
+                registerConfirmPassword.type = isChecked ? 'text' : 'password';
+            }
+        };
+        
+        /**
+         * Generates a consistent hex color from a string ID (for polyline colors).
+         * @param {string} id - The user ID.
+         * @returns {string} A hex color string (e.g., #A3B5C7).
+         */
+        const getColorFromId = (id) => {
+            let hash = 0;
+            for (let i = 0; i < id.length; i++) {
+                hash = id.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+            return "#" + "00000".substring(0, 6 - c.length) + c;
+        };
 
-            // Create or update the accuracy circle
-            if (!accuracyCircle) {
-                accuracyCircle = new google.maps.Circle({
-                    strokeColor: '#4A90E2',
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: '#4A90E2',
-                    fillOpacity: 0.2,
-                    map: map,
-                    center: newPosition,
-                    radius: accuracy // Radius in meters
+
+        // --- Firebase Initialization and Authentication ---
+
+        const initializeFirebase = async () => {
+            try {
+                // Initialize Firebase App using the user-provided config
+                app = initializeApp(userProvidedFirebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                analytics = getAnalytics(app); // Initialize Analytics
+
+                // Set up auth state change listener
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        // Use displayName first, then email, otherwise fallback to UID
+                        const displayIdentifier = user.displayName || user.email || userId;
+                        userIdDisplay.textContent = `User: ${displayIdentifier}`;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                        
+                        // If signed in via email/password, ensure we don't try to sign in anonymously
+                        if (!user.isAnonymous && initialAuthToken) {
+                             // Do nothing if user is already authenticated
+                        } else if (user.isAnonymous && initialAuthToken) {
+                            // If signed in anonymously but initial token exists, sign in with token
+                            await signInWithCustomToken(auth, initialAuthToken);
+                            // The listener will re-run on successful token sign-in
+                            return;
+                        }
+
+                        // UI for Authenticated user
+                        toggleAppUI(true);
+                        toggleBtn.disabled = false;
+                        toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
+
+                        // Start real-time location listener after auth is ready
+                        setupRealTimeLocationListener();
+                    } else {
+                        console.log("No user authenticated. Displaying login screen.");
+                        userId = 'anonymous';
+                        userIdDisplay.textContent = 'Please log in';
+                        toggleAppUI(false);
+
+                        // If no user is logged in AND no initial token is present, we need to sign in anonymously
+                        if (!initialAuthToken) {
+                             await signInAnonymously(auth);
+                        } else {
+                             // If token is present but failed, show error.
+                             userIdDisplay.textContent = 'Token Auth Failed. Log in manually.';
+                        }
+                    }
                 });
+
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error.message);
+                userIdDisplay.textContent = 'Error: Check Console';
+            }
+        };
+
+        // --- Auth Handlers ---
+
+        const handleRegistration = async (e) => {
+            e.preventDefault();
+            registerError.classList.add('hidden');
+            const username = registerUsername.value.trim(); // Get username
+            const email = registerEmail.value;
+            const password = registerPassword.value;
+            const confirmPassword = registerConfirmPassword.value;
+
+            if (password !== confirmPassword) {
+                registerError.textContent = 'Passwords do not match.';
+                registerError.classList.remove('hidden');
+                return;
+            }
+
+            if (password.length < 6) {
+                registerError.textContent = 'Password must be at least 6 characters.';
+                registerError.classList.remove('hidden');
+                return;
+            }
+            
+            if (username.length === 0) {
+                 registerError.textContent = 'Username is required.';
+                registerError.classList.remove('hidden');
+                return;
+            }
+
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                
+                // Set the display name (username) right after creation
+                await updateProfile(userCredential.user, {
+                    displayName: username
+                });
+                
+                // Auth state listener handles successful login
+            } catch (error) {
+                console.error("Registration Error:", error.message);
+                registerError.textContent = `Registration failed: ${error.message}`;
+                registerError.classList.remove('hidden');
+            }
+        };
+
+        const handleLogin = async (e) => {
+            e.preventDefault();
+            loginError.classList.add('hidden');
+            const email = loginEmail.value;
+            const password = loginPassword.value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                // Auth state listener handles successful login
+            } catch (error) {
+                console.error("Login Error:", error.message);
+                loginError.textContent = 'Login failed. Check email and password.';
+                loginError.classList.remove('hidden');
+            }
+        };
+
+        const handleLogout = async () => {
+            // AWAIT stopTracking to ensure location data is cleared from Firestore before sign-out
+            if (isTracking) {
+                await stopTracking(); 
+            }
+            try {
+                // Sign out the current authenticated user
+                await signOut(auth);
+                // The onAuthStateChanged listener handles the subsequent anonymous sign-in and UI cleanup.
+            } catch (error) {
+                console.error("Logout Error:", error.message);
+                showModal("Logout failed. Please try again.");
+            }
+        };
+
+        // --- Geolocation and Firestore Data Management ---
+
+        /**
+         * Puts the current user's location data into the public Firestore collection.
+         * @param {number} lat - Latitude.
+         * @param {number} lng - Longitude.
+         * @param {boolean} isTracking - Whether the user is actively sharing.
+         */
+        const updateFirestoreLocation = async (lat, lng, isTracking) => {
+            if (!db || !userId || userId === 'anonymous') return;
+
+            const userDocRef = doc(db, getPublicCollectionPath('user_locations'), userId);
+
+            if (isTracking) {
+                const data = {
+                    lat: lat,
+                    lng: lng,
+                    timestamp: new Date().getTime(),
+                    // Store display name first for map identification, fallback to email or UID
+                    displayId: auth.currentUser.displayName || auth.currentUser.email || userId,
+                    isTracking: true
+                };
+                await setDoc(userDocRef, data);
+                console.log(`Location updated for ${userId}: (${lat}, ${lng})`);
             } else {
-                accuracyCircle.setCenter(newPosition);
-                accuracyCircle.setRadius(accuracy);
+                // Remove the document when the user stops tracking (to hide them from the map)
+                await deleteDoc(userDocRef);
+                console.log(`Location data removed for ${userId}.`);
+                // Also remove their marker and path immediately
+                removeMarker(userId);
+            }
+        };
+
+        /**
+         * Success handler for Geolocation.
+         * @param {GeolocationPosition} position
+         */
+        const geoSuccess = (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const pos = { lat, lng };
+
+            // 1. Update own location in public Firestore
+            updateFirestoreLocation(lat, lng, true);
+
+            // 2. Center map and zoom in on start (if flag is set)
+            if (map && isMapCentered) { 
+                 map.setCenter(pos);
+                 map.setZoom(15); // Set zoom level to 15 for a close view
+                 isMapCentered = false; // Reset the flag so it only zooms on the initial location update after 'Start'
+            }
+        };
+
+        /**
+         * Error handler for Geolocation.
+         * @param {GeolocationPositionError} error
+         */
+        const geoError = (error) => {
+            console.error("Geolocation Error:", error.message);
+            // Display message using a modal instead of alert
+            showModal(`Location Error: ${error.message}. Please enable location permissions.`);
+        };
+
+
+        /**
+         * Starts watching the user's position and updating Firestore.
+         */
+        const startTracking = () => {
+            if (!navigator.geolocation) {
+                showModal("Geolocation is not supported by this browser.");
+                return;
             }
 
-            latDisplay.innerText = latitude.toFixed(6);
-            longDisplay.innerText = longitude.toFixed(6);
-            accuracyDisplay.innerText = `${accuracy.toFixed(2)} m`;
+            // Set flag to force map centering and zoom on the next successful location update
+            isMapCentered = true;
 
-            // Update the path when tracking is active
-            if (watchId) {
-                pathCoordinates.push(newPosition);
-                if (!pathPolyline) {
-                    pathPolyline = new google.maps.Polyline({
-                        path: pathCoordinates,
-                        geodesic: true,
-                        strokeColor: '#FF0000',
-                        strokeOpacity: 1.0,
-                        strokeWeight: 4,
-                    });
-                    pathPolyline.setMap(map);
-                } else {
-                    pathPolyline.setPath(pathCoordinates);
-                }
-            }
-        }
+            // Start watching position, update every 5 seconds (5000ms)
+            watchId = navigator.geolocation.watchPosition(geoSuccess, geoError, {
+                enableHighAccuracy: true,
+                maximumAge: 5000,
+                timeout: 10000
+            });
+            isTracking = true;
+            toggleBtn.textContent = 'Stop Sharing Location';
+            toggleBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
+            toggleBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
+            console.log("Tracking started. Watch ID:", watchId);
+        };
 
-        // --- Geolocation Logic ---
-        function findMyCurrentLocation() {
-            if ("geolocation" in navigator) {
-                latDisplay.innerText = 'Finding...';
-                longDisplay.innerText = 'Finding...';
-                accuracyDisplay.innerText = '...';
-
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        updateMap(position);
-                    },
-                    (error) => {
-                        console.error("Geolocation Error:", error);
-                        let errorMessage = "An unknown error occurred.";
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                errorMessage = "You denied the request for Geolocation.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errorMessage = "Location information is unavailable.";
-                                break;
-                            case error.TIMEOUT:
-                                errorMessage = "The request to get user location timed out.";
-                                break;
-                        }
-                        showMessage("Location Error", errorMessage);
-                        latDisplay.innerText = '--';
-                        longDisplay.innerText = '--';
-                        accuracyDisplay.innerText = '--';
-                    },
-                    { enableHighAccuracy: true }
-                );
-            } else {
-                showMessage("Feature Not Supported", "Your browser does not support geolocation.");
-            }
-        }
-
-        // Function to start live tracking
-        function startLiveTracking() {
-            if ("geolocation" in navigator) {
-                findMeBtn.classList.add('hidden');
-                trackMeBtn.classList.add('hidden');
-                stopTrackingBtn.classList.remove('hidden');
-
-                latDisplay.innerText = 'Tracking...';
-                longDisplay.innerText = 'Tracking...';
-                accuracyDisplay.innerText = '...';
-                distanceDisplay.innerText = '0.00 km';
-
-                // Clear the previous path before starting a new one
-                pathCoordinates = [];
-                totalDistanceKm = 0;
-                if (pathPolyline) {
-                    pathPolyline.setPath([]);
-                }
-
-                watchId = navigator.geolocation.watchPosition(
-                    (position) => {
-                        updateMap(position);
-                    },
-                    (error) => {
-                        console.error("Geolocation Watch Error:", error);
-                        stopLiveTracking();
-                        let errorMessage = "An unknown tracking error occurred.";
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                errorMessage = "You denied the request for Geolocation to track your location.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errorMessage = "Location information is unavailable for tracking.";
-                                break;
-                            case error.TIMEOUT:
-                                errorMessage = "The request to track your location timed out.";
-                                break;
-                        }
-                        showMessage("Tracking Error", errorMessage);
-                    },
-                    { enableHighAccuracy: true }
-                );
-            } else {
-                showMessage("Feature Not Supported", "Your browser does not support geolocation.");
-            }
-        }
-
-        // Function to stop live tracking
-        function stopLiveTracking() {
-            if (watchId) {
+        /**
+         * Stops watching the user's position and removes data from Firestore.
+         */
+        const stopTracking = async () => {
+            if (watchId !== null) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
-
-                findMeBtn.classList.remove('hidden');
-                trackMeBtn.classList.remove('hidden');
-                stopTrackingBtn.classList.add('hidden');
-
-                showMessage("Tracking Stopped", "Live location tracking has been stopped.");
             }
-        }
-        
-        // Function to clear the path from the map
-        function clearPath() {
-            pathCoordinates = [];
-            totalDistanceKm = 0;
-            if (pathPolyline) {
-                pathPolyline.setPath([]);
+            // Remove location data from Firestore (AWAIT is critical here for cleanup)
+            await updateFirestoreLocation(0, 0, false);
+            isTracking = false;
+            toggleBtn.textContent = 'Start Sharing Location';
+            toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
+            toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
+            console.log("Tracking stopped.");
+        };
+
+        // --- Map and Marker Management (Google Maps) ---
+
+        /**
+         * Initializes the Google map.
+         */
+        const initializeMap = () => {
+             // The google.maps object is available globally when the script loads
+            map = new google.maps.Map(mapContainer, {
+                center: { lat: 0, lng: 0 }, // Default view to world map center
+                zoom: 2,
+                // Using a default map style ID
+                mapId: "DEMO_MAP_ID"
+            });
+            console.log("Google Map initialized.");
+        };
+
+        /**
+         * Handles the real-time location data received from the public Firestore collection.
+         */
+        const setupRealTimeLocationListener = () => {
+            if (!db) return;
+
+            // Listens to the public 'user_locations' collection
+            const colRef = collection(db, getPublicCollectionPath('user_locations'));
+
+            // Set up real-time listener for all user locations
+            onSnapshot(colRef, (snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    const data = change.doc.data();
+                    const targetUserId = change.doc.id;
+                    const displayId = data.displayId || targetUserId; // Use stored display name/email/UID
+
+                    if (change.type === "removed" || !data.isTracking) {
+                        // Document removed (user stopped tracking)
+                        removeMarker(targetUserId);
+                    } else if (change.type === "added" || change.type === "modified") {
+                        // New user or location updated
+                        updateMarker(targetUserId, data.lat, data.lng, data.timestamp, displayId);
+                    }
+                });
+            }, (error) => {
+                console.error("Error listening to Firestore location updates:", error);
+            });
+        };
+
+        /**
+         * Updates or creates a marker and its corresponding movement line on the map.
+         * @param {string} id - User ID.
+         * @param {number} lat - Latitude.
+         * @param {number} lng - Longitude.
+         * @param {number} timestamp - Last update time.
+         * @param {string} displayId - User identifier for display (username, email, or UID).
+         */
+        const updateMarker = (id, lat, lng, timestamp, displayId) => {
+            const isSelf = id === userId;
+            const position = { lat: lat, lng: lng };
+            const icon = isSelf ? MY_MARKER_ICON : OTHER_MARKER_ICON;
+            const timeString = new Date(timestamp).toLocaleTimeString();
+
+            // InfoWindow Content now prominently displays the username (displayId)
+            const popupContent = `
+                <div class="p-1">
+                    <div class="text-sm font-semibold">${isSelf ? '👑 Your Location (You)' : '📍 User: ' + displayId}</div>
+                    <div class="text-xs text-gray-500">ID: ${id}</div>
+                    <div class="text-xs text-gray-500">Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}</div>
+                    <div class="text-xs text-gray-500">Last Seen: ${timeString}</div>
+                </div>
+            `;
+
+            let marker = userMarkers[id];
+            let infoWindow = infoWindows[id];
+
+            // 1. Marker Logic (Create/Update Marker Position)
+            if (marker) {
+                // Marker exists, update position and icon
+                marker.setPosition(position);
+                marker.setIcon(icon);
+            } else {
+                // Marker does not exist, create new one
+                marker = new google.maps.Marker({
+                    position: position,
+                    map: map,
+                    title: isSelf ? 'Your Location' : 'User: ' + displayId, // Title shows the name
+                    icon: icon,
+                });
+
+                userMarkers[id] = marker;
+
+                // Create InfoWindow
+                infoWindow = new google.maps.InfoWindow({ content: popupContent });
+                infoWindows[id] = infoWindow;
+
+                // Add click listener to show InfoWindow
+                marker.addListener('click', () => {
+                    // Close any open InfoWindow first
+                    Object.values(infoWindows).forEach(iw => iw.close());
+                    infoWindow.open({ anchor: marker, map: map, shouldFocus: false });
+                });
             }
-            distanceDisplay.innerText = '0.00 km';
-            showMessage("Path Cleared", "The visual path on the map and the distance have been erased.");
-        }
+
+            // Update InfoWindow content on every update
+            infoWindow.setContent(popupContent);
+
+
+            // If it's the current user's marker, pan the map to follow if they are actively tracking
+            if (isSelf && isTracking) {
+                map.panTo(position);
+            }
+
+            // ----------------------------------------------------
+            // 2. Polyline (Movement Tracking) Logic
+            // ----------------------------------------------------
+
+            // Initialize path array if it doesn't exist
+            if (!userPaths[id]) {
+                userPaths[id] = [];
+            }
+            
+            // Add the new position to the user's path history (preventing duplicates if location hasn't changed)
+            const lastPos = userPaths[id][userPaths[id].length - 1];
+            // Check if position is different enough (e.g., if we were storing more points, this check would be more complex)
+            const isDifferent = !lastPos || (lastPos.lat !== lat || lastPos.lng !== lng);
+            
+            if (isDifferent) {
+                userPaths[id].push(position);
+            }
+
+            // Update or create Polyline
+            let polyline = userPolylines[id];
+            const lineColor = isSelf ? '#ef4444' : getColorFromId(id); // Red for self, dynamic for others
+            
+            if (polyline) {
+                // Polyline exists, update path
+                polyline.setPath(userPaths[id]);
+            } else {
+                // Create new Polyline
+                polyline = new google.maps.Polyline({
+                    path: userPaths[id],
+                    geodesic: true,
+                    strokeColor: lineColor,
+                    strokeOpacity: isSelf ? 1.0 : 0.8,
+                    strokeWeight: isSelf ? 5 : 3, // Thicker line for self
+                    map: map,
+                });
+                userPolylines[id] = polyline;
+            }
+        };
+
+        /**
+         * Removes a marker and its path from the map.
+         * @param {string} id - User ID.
+         */
+        const removeMarker = (id) => {
+            if (userMarkers[id]) {
+                // Clear marker from map
+                userMarkers[id].setMap(null);
+                delete userMarkers[id];
+                console.log(`Marker removed for ${id}`);
+            }
+
+            // PATH CLEANUP
+            if (userPolylines[id]) {
+                userPolylines[id].setMap(null); // Remove line from map
+                delete userPolylines[id];
+            }
+            if (userPaths[id]) {
+                delete userPaths[id]; // Clear path history
+            }
+            
+            // Close and remove InfoWindow
+            if(infoWindows[id]) {
+                infoWindows[id].close();
+                delete infoWindows[id];
+            }
+        };
+
+        // --- Modal/Message Box Implementation (for alerts) ---
+
+        const showModal = (message) => {
+            const existingModal = document.getElementById('custom-modal');
+            if (existingModal) existingModal.remove();
+
+            const modalHtml = `
+                <div id="custom-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 transition-opacity duration-300">
+                    <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 md:w-1/3">
+                        <h3 class="text-lg font-bold text-red-600 mb-4">Notification</h3>
+                        <p class="text-gray-700 mb-6">${message}</p>
+                        <button id="modal-close-btn" class="w-full bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600 transition duration-150">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            document.getElementById('modal-close-btn').onclick = () => {
+                document.getElementById('custom-modal').remove();
+            };
+        };
+
+        // --- Event Listeners and Initial Setup ---
+
+        // Toggle tracking
+        toggleBtn.addEventListener('click', () => {
+            if (isTracking) {
+                stopTracking();
+            } else {
+                startTracking();
+            }
+        });
+
+        // Toggle login/register card views
+        document.getElementById('switch-to-register').addEventListener('click', () => {
+            loginCard.classList.add('hidden');
+            registerCard.classList.remove('hidden');
+            loginError.classList.add('hidden'); // Clear errors on switch
+        });
+        document.getElementById('switch-to-login').addEventListener('click', () => {
+            registerCard.classList.add('hidden');
+            loginCard.classList.remove('hidden');
+            registerError.classList.add('hidden'); // Clear errors on switch
+        });
+
+        // Form submissions
+        loginForm.addEventListener('submit', handleLogin);
+        registerForm.addEventListener('submit', handleRegistration);
+        logoutBtn.addEventListener('click', handleLogout);
+
+        // Password visibility toggles
+        loginShowPassword.addEventListener('change', () => togglePasswordVisibility('login'));
+        registerShowPassword.addEventListener('change', () => togglePasswordVisibility('login')); // Fixed type parameter
+        registerShowPassword.addEventListener('change', () => togglePasswordVisibility('register'));
+
+        // Initialize map and Firebase when the window loads
+        window.onload = async () => {
+            await initializeFirebase();
+
+            // Wait until Google Maps API script is loaded
+            const mapLoadCheck = setInterval(() => {
+                if (typeof google !== 'undefined' && google.maps) {
+                    clearInterval(mapLoadCheck);
+                    initializeMap();
+                }
+            }, 100);
+        };
     </script>
-    <!-- Load the Google Maps API script -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDCBD8y02er5VSinumFXBmAFEtsg2oYz9I&callback=initMap" async defer></script>
 </body>
 </html>
