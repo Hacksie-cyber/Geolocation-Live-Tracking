@@ -571,7 +571,7 @@
             // InfoWindow Content now prominently displays the username (displayId)
             const popupContent = `
                 <div class="p-1">
-                    <div class="text-sm font-semibold">${markerTitle}</div>
+                    <div class="text-sm font-semibold" style="color: ${isSelf ? '#dc2626' : '#374151'};">${markerTitle}</div>
                     <div class="text-xs text-gray-500">Last Seen: ${timeString}</div>
                     <div class="text-xs text-gray-500">Lat/Lng: ${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
                 </div>
