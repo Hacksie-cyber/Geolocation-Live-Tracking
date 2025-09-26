@@ -491,19 +491,25 @@
 
         /**
          * Stops watching the user's position and removes data from Firestore.
+         * NOTE: State updates and UI changes are moved before the await to ensure responsiveness.
          */
         const stopTracking = async () => {
             if (watchId !== null) {
+                // 1. Stop Geolocation API tracking
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }
-            // Remove location data from Firestore (AWAIT is critical here for cleanup)
-            await updateFirestoreLocation(0, 0, false);
+            
+            // 2. Immediately update local state and UI
             isTracking = false;
             toggleBtn.textContent = 'Start Sharing Location';
             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
-            console.log("Tracking stopped.");
+            console.log("Tracking stopped locally.");
+
+            // 3. Perform asynchronous cleanup on Firestore (AWAIT is critical here for cleanup)
+            await updateFirestoreLocation(0, 0, false);
+            console.log("Firestore location removed.");
         };
 
         // --- Map and Marker Management (Google Maps) ---
@@ -712,9 +718,10 @@
         // --- Event Listeners and Initial Setup ---
 
         // Toggle tracking
-        toggleBtn.addEventListener('click', () => {
+        toggleBtn.addEventListener('click', async () => {
             if (isTracking) {
-                stopTracking();
+                // Await stopTracking to handle the async Firestore cleanup robustly
+                await stopTracking();
             } else {
                 startTracking();
             }
