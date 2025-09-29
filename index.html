@@ -63,9 +63,8 @@
             <div class="mt-1 pt-4 border-t border-gray-100 flex flex-col lg:flex-row items-start lg:items-center space-y-4 lg:space-y-0 lg:space-x-6 w-full">
                 
                 <!-- User ID Display (Full width on all screens for prominence) -->
-                <!-- Changed initial text to better reflect loading status -->
                 <span id="user-id-display" class="text-xs font-mono text-gray-500 bg-gray-100 p-2 rounded-lg truncate w-full lg:w-auto lg:flex-grow-0">
-                    Authentication Loading...
+                    Connecting...
                 </span>
                 
                 <!-- Message Input Field and Button (takes up the available space on desktop) -->
@@ -219,7 +218,6 @@
         /** @type {Object<string, google.maps.InfoWindow>} */
         const infoWindows = {}; 
         
-        // This variable now only holds the last message successfully SENT by the user.
         let userMessage = ""; 
         let isMapCentered = false; 
         
@@ -358,30 +356,41 @@
 
         const initializeFirebase = async () => {
             try {
-                // Initialize Firebase App using the user-provided config
+                // 1. Initialize Firebase App
                 app = initializeApp(userProvidedFirebaseConfig);
-                db = getFirestore(app);
                 auth = getAuth(app);
+                db = getFirestore(app);
                 getAnalytics(app); 
 
-                // Set up auth state change listener
-                onAuthStateChanged(auth, async (user) => {
+                // 2. IMMEDIATE TOKEN SIGN-IN ATTEMPT (FIX FOR LOADING HANG)
+                if (initialAuthToken) {
+                    userIdDisplay.textContent = 'Authenticating...';
+                    try {
+                        // Attempt to sign in with the custom token provided by the environment
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        // The onAuthStateChanged listener below will catch the successful sign-in
+                    } catch (error) {
+                        console.error("Custom Token Sign-In Failed:", error);
+                        // If token fails, the listener will proceed with a signed-out state.
+                    }
+                } else {
+                    // If no token, we are just waiting for manual login.
+                    userIdDisplay.textContent = 'Waiting for login...';
+                }
+
+                // 3. Set up the definitive auth state change listener
+                onAuthStateChanged(auth, (user) => {
                     if (user) {
+                        // --- AUTH SUCCESS STATE ---
                         userId = user.uid;
                         // Prioritize username (displayName), then email, then userId
                         const displayIdentifier = user.displayName || user.email || userId;
                         userIdDisplay.textContent = `User ID: ${displayIdentifier}`;
                         
-                        // Check for custom token sign-in logic
-                        if (initialAuthToken && user.isAnonymous) {
-                            // If user is anonymous but we have a token, try to sign in with token
-                            await signInWithCustomToken(auth, initialAuthToken);
-                            return; 
-                        }
-
                         toggleAppUI(true);
                         toggleBtn.disabled = false;
                         fitToAllBtn.disabled = false; 
+
                         // Set initial button style
                         if (!isTracking) {
                             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
@@ -390,19 +399,13 @@
 
                         setupRealTimeLocationListener();
                     } else {
-                        // User is signed out
+                        // --- AUTH SIGNED OUT STATE ---
                         userId = 'anonymous';
-                        // FIX: Explicitly set the message when logged out. Removed automatic anonymous sign-in to prevent state confusion.
+                        // FIX: Explicitly set the message when logged out. 
                         userIdDisplay.textContent = 'Please log in or register.';
                         toggleAppUI(false);
                         fitToAllBtn.disabled = true; 
                         sendMessageBtn.disabled = true; 
-                        
-                        // If an initial token was provided but failed, alert the user (otherwise just show login form)
-                        if (initialAuthToken) {
-                             console.error('Initial custom token authentication failed.');
-                             userIdDisplay.textContent = 'Token Auth Failed. Log in manually.';
-                        }
                     }
                 });
 
@@ -716,7 +719,6 @@
                             fitMapToBounds(); 
                         }
                         // Update local message state/input if tracking is on (if another tab set the message)
-                        // This handles multi-tab synchronization.
                         if (data.isTracking && data.message !== userMessage) {
                             userMessage = message;
                             messageInput.value = message;
@@ -793,7 +795,7 @@
                     // Close all other InfoWindows
                     Object.values(infoWindows).forEach(iw => iw.close());
                     
-                    // FIX: Use the global userMessage for self, as it's the most up-to-date source of truth.
+                    // Use the global userMessage for self, as it's the most up-to-date source of truth.
                     const messageToShow = isSelf ? userMessage : message;
 
                     // --- UPDATED POPUP CONTENT (COORDINATES AND MESSAGE ONLY) ---
@@ -815,7 +817,7 @@
             // 3. InfoWindow Content Update (if currently open)
              if (infoWindow && infoWindow.getMap() === map) { 
                   // If the InfoWindow is currently visible, refresh its content
-                  // FIX: Use the global userMessage for self when updating an open InfoWindow
+                  // Use the global userMessage for self when updating an open InfoWindow
                   const messageToShow = isSelf ? userMessage : message;
 
                   const updatedContent = `
