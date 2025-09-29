@@ -36,8 +36,8 @@
 
     <header class="mb-4 flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-lg">
         <h1 class="text-2xl font-extrabold text-gray-800 mb-2 md:mb-0">
-            <svg class="inline w-6 h-6 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            Real-Time Location Share
+            <svg class="inline w-6 h-6 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            Collaborative Location Share
         </h1>
         <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
             <span id="user-id-display" class="text-xs font-mono text-gray-500 bg-gray-100 p-2 rounded-lg truncate w-full sm:w-auto">
@@ -46,7 +46,7 @@
             <button id="logout-btn" class="hidden w-full sm:w-auto px-4 py-2 text-white bg-gray-500 hover:bg-gray-600 font-semibold rounded-lg transition duration-150 ease-in-out shadow-md">
                 Logout
             </button>
-            <button id="toggle-tracking-btn" class="hidden w-full sm:w-auto px-4 py-2 text-white font-semibold rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" disabled>
+            <button id="toggle-tracking-btn" class="hidden w-full sm:w-auto px-4 py-2 text-white font-semibold rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-green-500 hover:bg-green-600" disabled>
                 Start Sharing Location
             </button>
         </div>
@@ -159,8 +159,8 @@
         const userMarkers = {}; // Object to store Google Maps markers: { userId: markerInstance }
         /** @type {Object<string, google.maps.InfoWindow>} */
         const infoWindows = {}; // Object to store Google Maps InfoWindow instances
-        /** @type {Object<string, string>} */
-        const userAddresses = {}; // Cache for addresses: { userId: "Street Address, City" }
+        /** @type {Object<string, {address: string, lastPathLength: number}>} */
+        const userAddresses = {}; // Cache for addresses: { userId: {address: "Street Address", lastPathLength: 5} }
         let isMapCentered = false; // Flag to force map centering and zooming on location start
         
         // --- GLOBAL OBJECTS FOR PATH TRACKING ---
@@ -196,13 +196,14 @@
         const registerShowPassword = document.getElementById('register-show-password');
         const registerError = document.getElementById('register-error');
 
-        // --- Custom Google Maps Icon Definitions (All Red, Self is Brighter/Larger) ---
+        // --- Custom Google Maps Icon Definitions ---
+        // Self is Blue, Others are Red
         const MY_MARKER_ICON = {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#ef4444', // Bright Red (red-500)
+            fillColor: '#3b82f6', // Blue (blue-500)
             fillOpacity: 1,
             strokeWeight: 4,
-            strokeColor: '#fecaca', // Light Pink/Red outline
+            strokeColor: '#bfdbfe', // Light Blue outline
             scale: 8, // Larger size for self
         };
         const OTHER_MARKER_ICON = {
@@ -236,11 +237,11 @@
             for (let i = 0; i < id.length; i++) {
                 hash = id.charCodeAt(i) + ((hash << 5) - hash);
             }
+            // Use a color palette that contrasts with the blue/red markers
             const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
             return "#" + "00000".substring(0, 6 - c.length) + c;
         };
         
-        // ... (Utility functions for UI and Auth handlers remain the same) ...
         const toggleAppUI = (isAuthenticated) => {
             if (isAuthenticated) {
                 mapContainer.classList.remove('hidden');
@@ -296,25 +297,30 @@
                 app = initializeApp(userProvidedFirebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                getAnalytics(app); // Initialize Analytics
+                getAnalytics(app); 
 
                 // Set up auth state change listener
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
+                        // Prioritize username (displayName), then email, then userId
                         const displayIdentifier = user.displayName || user.email || userId;
                         userIdDisplay.textContent = `User: ${displayIdentifier}`;
                         
-                        if (!user.isAnonymous && initialAuthToken) {
-                        } else if (user.isAnonymous && initialAuthToken) {
+                        // Check for custom token sign-in logic
+                        if (initialAuthToken && user.isAnonymous) {
+                            // If user is anonymous but we have a token, try to sign in with token
                             await signInWithCustomToken(auth, initialAuthToken);
                             return; 
                         }
 
                         toggleAppUI(true);
                         toggleBtn.disabled = false;
-                        toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
-                        toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
+                        // Set initial button style
+                        if (!isTracking) {
+                            toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
+                            toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
+                        }
 
                         setupRealTimeLocationListener();
                     } else {
@@ -322,9 +328,11 @@
                         userIdDisplay.textContent = 'Please log in';
                         toggleAppUI(false);
 
+                        // If no user and no token, sign in anonymously to satisfy security rules (if configured for anonymous access)
                         if (!initialAuthToken) {
                              await signInAnonymously(auth);
                         } else {
+                             // If token failed or is present but user is null, prompt manual login
                              userIdDisplay.textContent = 'Token Auth Failed. Log in manually.';
                         }
                     }
@@ -337,7 +345,7 @@
             }
         };
 
-        // --- Auth Handlers (omitted for brevity, assume unchanged) ---
+        // --- Auth Handlers ---
         const handleRegistration = async (e) => {
             e.preventDefault();
             registerError.classList.add('hidden');
@@ -364,9 +372,9 @@
                 return;
             }
 
-
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                // Update profile with the display name (username) immediately after creation
                 await updateProfile(userCredential.user, { displayName: username });
             } catch (error) {
                 console.error("Registration Error:", error.message);
@@ -391,6 +399,7 @@
         };
 
         const handleLogout = async () => {
+            // Stop tracking and clean up Firestore before logging out
             if (isTracking) {
                 await stopTracking(); 
             }
@@ -406,18 +415,26 @@
         const updateFirestoreLocation = async (lat, lng, isTracking) => {
             if (!db || !userId || userId === 'anonymous') return;
 
+            // Use public collection so other authenticated users can see this location
             const userDocRef = doc(db, getPublicCollectionPath('user_locations'), userId);
 
             if (isTracking) {
+                // Determine the display ID to store (Username > Email > UID)
+                const currentUser = auth.currentUser;
+                const displayId = currentUser.displayName || currentUser.email || userId;
+
+                // TEMPORARY STORAGE: This updates/overwrites the single location document 
+                // for this user. It will be explicitly deleted on stop/logout.
                 const data = {
                     lat: lat,
                     lng: lng,
                     timestamp: new Date().getTime(),
-                    displayId: auth.currentUser.displayName || auth.currentUser.email || userId,
+                    displayId: displayId, 
                     isTracking: true
                 };
                 await setDoc(userDocRef, data);
             } else {
+                // TEMPORARY STORAGE CLEANUP: Delete the user's location document when tracking is stopped or user logs out.
                 await deleteDoc(userDocRef);
                 removeMarker(userId);
                 // Clear the address cache for the user who stopped tracking
@@ -490,7 +507,7 @@
             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
 
-            // 3. Perform asynchronous cleanup on Firestore
+            // 3. Perform asynchronous cleanup on Firestore (THIS DELETES THE LOCATION)
             await updateFirestoreLocation(0, 0, false);
         };
 
@@ -515,6 +532,7 @@
 
             const colRef = collection(db, getPublicCollectionPath('user_locations'));
 
+            // Listen for all location changes in the public collection
             onSnapshot(colRef, (snapshot) => {
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
@@ -524,7 +542,10 @@
                     if (change.type === "removed" || !data.isTracking) {
                         removeMarker(targetUserId);
                     } else if (change.type === "added" || change.type === "modified") {
-                        updateMarker(targetUserId, data.lat, data.lng, data.timestamp, displayId);
+                        // Only update if location data exists and tracking is active
+                        if (data.lat !== undefined && data.lng !== undefined && data.isTracking) {
+                            updateMarker(targetUserId, data.lat, data.lng, data.timestamp, displayId);
+                        }
                     }
                 });
             }, (error) => {
@@ -544,24 +565,16 @@
                 return;
             }
 
-            // Check cache first
-            if (userAddresses[id] && userPaths[id].length > 0 && userPaths[id].length > userAddresses[id].lastPathLength) {
-                // If the path length hasn't changed much since last update, use cache
-                // Note: The logic here is simplified. For production, you'd use a bounding box comparison.
-                // For now, we will just clear cache on movement and always attempt geocode.
-                // Reset cache to allow new lookup
-                delete userAddresses[id]; 
-            }
-
-            if (userAddresses[id]) {
+            // Check if address is already in cache
+            if (userAddresses[id] && userAddresses[id].address) {
+                // Return cached address immediately, but still trigger geocode below for fresh update
                 callback(userAddresses[id].address);
-                return;
             }
 
+            // Perform geocode lookup
             geocoder.geocode({ 'location': position }, (results, status) => {
                 let address = "Address Lookup Failed";
                 if (status === 'OK' && results[0]) {
-                    // Use the first (most accurate) result's formatted address
                     address = results[0].formatted_address;
                 } else if (status === 'ZERO_RESULTS') {
                     address = "No street address found.";
@@ -592,6 +605,10 @@
             const timeString = new Date(timestamp).toLocaleTimeString();
             const markerTitle = isSelf ? `👑 Your Location (You: ${displayId})` : `📍 User: ${displayId}`;
 
+            // --- Console Log for Diagnosis ---
+            console.log(`[MAP UPDATE] Drawing pin for ${displayId}. Color: ${isSelf ? 'BLUE (Self)' : 'RED (Other)'}. Lat: ${lat.toFixed(4)}`);
+            // ---------------------------------
+
             let marker = userMarkers[id];
             let infoWindow = infoWindows[id];
 
@@ -616,47 +633,48 @@
 
                 // Add click listener to show InfoWindow
                 marker.addListener('click', () => {
+                    // Close all other InfoWindows
                     Object.values(infoWindows).forEach(iw => iw.close());
+                    
+                    // Update content right before opening (uses latest cached address)
+                    const currentAddress = (userAddresses[id] && userAddresses[id].address) || "Loading current address...";
+                    const popupContent = `
+                        <div class="info-window p-1">
+                            <div class="text-base font-bold mb-1" style="color: ${isSelf ? '#3b82f6' : '#dc2626'};">${markerTitle}</div>
+                            <div class="font-semibold text-gray-800 break-words">${currentAddress}</div>
+                            <div class="text-xs text-gray-500 mt-1">Lat/Lng: ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+                            <div class="text-xs text-gray-500">Last Seen: ${timeString}</div>
+                        </div>
+                    `;
+                    infoWindow.setContent(popupContent);
+                    
                     infoWindow.open({ anchor: marker, map: map, shouldFocus: false });
                 });
             }
 
             // 2. InfoWindow Content & Reverse Geocoding
             
-            // Immediately update InfoWindow with coordinates/time, and request the address
+            // This function is called by fetchAddress when the geocoding request completes.
             const updateInfoWindowContent = (address) => {
-                const popupContent = `
-                    <div class="info-window p-1">
-                        <div class="text-base font-bold mb-1" style="color: ${isSelf ? '#dc2626' : '#374151'};">${markerTitle}</div>
-                        <div class="font-semibold text-gray-800 break-words">${address}</div>
-                        <div class="text-xs text-gray-500 mt-1">Lat/Lng: ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
-                        <div class="text-xs text-gray-500">Last Seen: ${timeString}</div>
-                    </div>
-                `;
-                infoWindow.setContent(popupContent);
-                
                 // If the InfoWindow is currently open, force a refresh/re-open to display the new address
                 if (infoWindow.getMap()) {
-                     infoWindow.open({ anchor: marker, map: map, shouldFocus: false });
+                    // Trigger the marker click to refresh the InfoWindow content
+                    google.maps.event.trigger(marker, 'click');
                 }
             };
             
-            // Set initial content while address is loading or use cached value
-            const initialAddress = (userAddresses[id] && userAddresses[id].address) || "Loading current address...";
-            updateInfoWindowContent(initialAddress);
-
-            // Call fetchAddress only if a valid geocoder exists
+            // Start the asynchronous address lookup using the Geocoder
             if (geocoder) {
                 fetchAddress(position, id, updateInfoWindowContent);
             }
 
 
-            // If it's the current user's marker, pan the map to follow if they are actively tracking
+            // 3. AGGRESSIVE PANNING/FOLLOWING LOGIC (Ensures the blue pin is always visible)
             if (isSelf && isTracking) {
                 map.panTo(position);
             }
 
-            // 3. Polyline (Movement Tracking) Logic
+            // 4. Polyline (Movement Tracking) Logic
             if (!userPaths[id]) {
                 userPaths[id] = [];
             }
@@ -670,7 +688,7 @@
             }
 
             let polyline = userPolylines[id];
-            const lineColor = isSelf ? '#ef4444' : getColorFromId(id); 
+            const lineColor = isSelf ? '#3b82f6' : getColorFromId(id); // Blue for self, unique color for others
             
             if (polyline) {
                 polyline.setPath(userPaths[id]);
