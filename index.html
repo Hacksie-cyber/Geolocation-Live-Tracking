@@ -152,22 +152,22 @@
         /** @type {google.maps.Map} */
         let map;
         /** @type {google.maps.Geocoder} */
-        let geocoder; // New global Geocoder instance
+        let geocoder; 
         let isTracking = false;
         let watchId = null;
         /** @type {Object<string, google.maps.Marker>} */
-        const userMarkers = {}; // Object to store Google Maps markers: { userId: markerInstance }
+        const userMarkers = {}; 
         /** @type {Object<string, google.maps.InfoWindow>} */
-        const infoWindows = {}; // Object to store Google Maps InfoWindow instances
+        const infoWindows = {}; 
         /** @type {Object<string, {address: string, lastPathLength: number}>} */
-        const userAddresses = {}; // Cache for addresses: { userId: {address: "Street Address", lastPathLength: 5} }
-        let isMapCentered = false; // Flag to force map centering and zooming on location start
+        const userAddresses = {}; 
+        let isMapCentered = false; 
         
         // --- GLOBAL OBJECTS FOR PATH TRACKING ---
         /** @type {Object<string, google.maps.Polyline>} */
-        const userPolylines = {}; // { userId: PolylineInstance }
+        const userPolylines = {}; 
         /** @type {Object<string, Array<{lat: number, lng: number}>>} */
-        const userPaths = {};     // { userId: [{lat, lng}, ...] }
+        const userPaths = {};     
         // -------------------------------------------
 
 
@@ -197,14 +197,13 @@
         const registerError = document.getElementById('register-error');
 
         // --- Custom Google Maps Icon Definitions ---
-        // Self is Blue, Others are Red
         const MY_MARKER_ICON = {
             path: google.maps.SymbolPath.CIRCLE,
             fillColor: '#3b82f6', // Blue (blue-500)
             fillOpacity: 1,
             strokeWeight: 4,
             strokeColor: '#bfdbfe', // Light Blue outline
-            scale: 8, // Larger size for self
+            scale: 8, 
         };
         const OTHER_MARKER_ICON = {
             path: google.maps.SymbolPath.CIRCLE,
@@ -212,7 +211,7 @@
             fillOpacity: 1,
             strokeWeight: 2,
             strokeColor: '#fca5a5', // Lighter Red outline
-            scale: 6, // Standard size for others
+            scale: 6, 
         };
 
 
@@ -424,7 +423,6 @@
                 const displayId = currentUser.displayName || currentUser.email || userId;
 
                 // TEMPORARY STORAGE: This updates/overwrites the single location document 
-                // for this user. It will be explicitly deleted on stop/logout.
                 const data = {
                     lat: lat,
                     lng: lng,
@@ -437,7 +435,8 @@
                 // TEMPORARY STORAGE CLEANUP: Delete the user's location document when tracking is stopped or user logs out.
                 await deleteDoc(userDocRef);
                 removeMarker(userId);
-                // Clear the address cache for the user who stopped tracking
+                // After removing self, recalculate bounds to fit remaining users
+                fitMapToBounds();
                 delete userAddresses[userId]; 
             }
         };
@@ -456,7 +455,7 @@
             // 1. Update own location in public Firestore (for OTHERS to see)
             updateFirestoreLocation(lat, lng, true);
 
-            // 2. FIX: Immediately update the local map marker for the current user
+            // 2. Immediately update the local map marker for the current user (FIX 1)
             const currentUser = auth.currentUser;
             const displayId = currentUser.displayName || currentUser.email || userId;
             updateMarker(userId, lat, lng, new Date().getTime(), displayId);
@@ -517,6 +516,40 @@
         };
 
         // --- Map and Marker Management (Google Maps) ---
+        
+        /**
+         * BUG FIX: Calculates the minimum bounding box to include all active markers
+         * and adjusts the map view.
+         */
+        const fitMapToBounds = () => {
+            const activeMarkers = Object.keys(userMarkers);
+            if (activeMarkers.length === 0) {
+                // If no markers, center on a default world view
+                map.setCenter({ lat: 0, lng: 0 });
+                map.setZoom(2);
+                return;
+            }
+
+            const bounds = new google.maps.LatLngBounds();
+            
+            // Extend the bounds to include all markers
+            activeMarkers.forEach(id => {
+                bounds.extend(userMarkers[id].getPosition());
+            });
+
+            // If there's only one marker (the current user), pan to them
+            if (activeMarkers.length === 1 && activeMarkers[0] === userId) {
+                 if (!isMapCentered) {
+                    map.panTo(userMarkers[userId].getPosition());
+                    // Keep a decent zoom level if they're the only one
+                    if (map.getZoom() < 10) map.setZoom(15); 
+                 }
+            } else {
+                // If multiple users exist, fit the map to show everyone
+                map.fitBounds(bounds);
+            }
+        };
+
 
         /**
          * Initializes the Google map and the Geocoder service.
@@ -539,20 +572,46 @@
 
             // Listen for all location changes in the public collection
             onSnapshot(colRef, (snapshot) => {
+                let shouldFitBounds = false; // Flag to batch map fitting
+
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
                     const targetUserId = change.doc.id;
                     const displayId = data.displayId || targetUserId; 
+                    
+                    // --- FIX: Filter out the current user's document from the listener ---
+                    // This prevents the map from receiving the current user's own updates 
+                    // from Firestore, as they are already handled locally by geoSuccess.
+                    if (targetUserId === userId) {
+                        // Only perform cleanup if this user's doc was removed
+                        if (change.type === "removed" || !data.isTracking) {
+                            removeMarker(targetUserId);
+                            fitMapToBounds(); 
+                        }
+                        return; // Skip further processing for self
+                    }
+                    // --- END FIX ---
+
 
                     if (change.type === "removed" || !data.isTracking) {
                         removeMarker(targetUserId);
+                        shouldFitBounds = true;
                     } else if (change.type === "added" || change.type === "modified") {
                         // Only update if location data exists and tracking is active
                         if (data.lat !== undefined && data.lng !== undefined && data.isTracking) {
                             updateMarker(targetUserId, data.lat, data.lng, data.timestamp, displayId);
+                            
+                            // Flag to fit bounds if any *other* user's location changes
+                            shouldFitBounds = true;
                         }
                     }
                 });
+                
+                // Perform the fitBounds once after processing all changes for *other* users
+                if (shouldFitBounds) {
+                    fitMapToBounds();
+                }
+
             }, (error) => {
                 console.error("Error listening to Firestore location updates:", error);
             });
@@ -560,9 +619,6 @@
         
         /**
          * Fetches the street address for a given position using the Geocoder service.
-         * @param {google.maps.LatLngLiteral} position - {lat: number, lng: number}.
-         * @param {string} id - User ID to cache the result.
-         * @param {Function} callback - Function to call with the formatted address string.
          */
         const fetchAddress = (position, id, callback) => {
             if (!geocoder) {
@@ -572,7 +628,6 @@
 
             // Check if address is already in cache
             if (userAddresses[id] && userAddresses[id].address) {
-                // Return cached address immediately, but still trigger geocode below for fresh update
                 callback(userAddresses[id].address);
             }
 
@@ -609,10 +664,6 @@
             const icon = isSelf ? MY_MARKER_ICON : OTHER_MARKER_ICON;
             const timeString = new Date(timestamp).toLocaleTimeString();
             const markerTitle = isSelf ? `👑 Your Location (You: ${displayId})` : `📍 User: ${displayId}`;
-
-            // --- Console Log for Diagnosis ---
-            console.log(`[MAP UPDATE] Drawing pin for ${displayId}. Color: ${isSelf ? 'BLUE (Self)' : 'RED (Other)'}. Lat: ${lat.toFixed(4)}`);
-            // ---------------------------------
 
             let marker = userMarkers[id];
             let infoWindow = infoWindows[id];
@@ -658,8 +709,6 @@
             }
 
             // 2. InfoWindow Content & Reverse Geocoding
-            
-            // This function is called by fetchAddress when the geocoding request completes.
             const updateInfoWindowContent = (address) => {
                 // If the InfoWindow is currently open, force a refresh/re-open to display the new address
                 if (infoWindow.getMap()) {
@@ -668,18 +717,12 @@
                 }
             };
             
-            // Start the asynchronous address lookup using the Geocoder
             if (geocoder) {
                 fetchAddress(position, id, updateInfoWindowContent);
             }
 
 
-            // 3. AGGRESSIVE PANNING/FOLLOWING LOGIC (Ensures the blue pin is always visible)
-            if (isSelf && isTracking) {
-                map.panTo(position);
-            }
-
-            // 4. Polyline (Movement Tracking) Logic
+            // 3. Polyline (Movement Tracking) Logic
             if (!userPaths[id]) {
                 userPaths[id] = [];
             }
