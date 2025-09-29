@@ -51,20 +51,21 @@
     <div class="max-w-6xl mx-auto">
         <!-- UPDATED HEADER WITH RESPONSIVE SPACING -->
         <header class="mb-6 flex flex-col bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-2xl">
-            <!-- Title Section -->
-            <div class="flex items-center justify-center lg:justify-start mb-4">
+            <!-- Title Section - Reduced mb-4 to mb-1 -->
+            <div class="flex items-center justify-center lg:justify-start mb-1">
                 <h1 class="text-3xl font-extrabold text-gray-800">
                     <svg class="inline w-7 h-7 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     Collaborative Location Share
                 </h1>
             </div>
 
-            <!-- Controls Section - Ensures single column on mobile, horizontal on desktop -->
-            <div class="mt-4 pt-4 border-t border-gray-100 flex flex-col lg:flex-row items-start lg:items-center space-y-4 lg:space-y-0 lg:space-x-6 w-full">
+            <!-- Controls Section - Reduced mt-4 to mt-1 -->
+            <div class="mt-1 pt-4 border-t border-gray-100 flex flex-col lg:flex-row items-start lg:items-center space-y-4 lg:space-y-0 lg:space-x-6 w-full">
                 
                 <!-- User ID Display (Full width on all screens for prominence) -->
+                <!-- Changed initial text to better reflect loading status -->
                 <span id="user-id-display" class="text-xs font-mono text-gray-500 bg-gray-100 p-2 rounded-lg truncate w-full lg:w-auto lg:flex-grow-0">
-                    Connecting...
+                    Authentication Loading...
                 </span>
                 
                 <!-- Message Input Field and Button (takes up the available space on desktop) -->
@@ -389,17 +390,17 @@
 
                         setupRealTimeLocationListener();
                     } else {
+                        // User is signed out
                         userId = 'anonymous';
-                        userIdDisplay.textContent = 'Please log in';
+                        // FIX: Explicitly set the message when logged out. Removed automatic anonymous sign-in to prevent state confusion.
+                        userIdDisplay.textContent = 'Please log in or register.';
                         toggleAppUI(false);
                         fitToAllBtn.disabled = true; 
                         sendMessageBtn.disabled = true; 
                         
-                        // If no user and no token, sign in anonymously to satisfy security rules (if configured for anonymous access)
-                        if (!initialAuthToken) {
-                             await signInAnonymously(auth);
-                        } else {
-                             // If token failed or is present but user is null, prompt manual login
+                        // If an initial token was provided but failed, alert the user (otherwise just show login form)
+                        if (initialAuthToken) {
+                             console.error('Initial custom token authentication failed.');
                              userIdDisplay.textContent = 'Token Auth Failed. Log in manually.';
                         }
                     }
