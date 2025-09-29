@@ -453,10 +453,15 @@
             toggleBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
 
 
-            // 1. Update own location in public Firestore
+            // 1. Update own location in public Firestore (for OTHERS to see)
             updateFirestoreLocation(lat, lng, true);
 
-            // 2. Center map and zoom in on start (if flag is set)
+            // 2. FIX: Immediately update the local map marker for the current user
+            const currentUser = auth.currentUser;
+            const displayId = currentUser.displayName || currentUser.email || userId;
+            updateMarker(userId, lat, lng, new Date().getTime(), displayId);
+            
+            // 3. Center map and zoom in on start (if flag is set)
             if (map && isMapCentered) { 
                  map.setCenter(pos);
                  map.setZoom(15); 
