@@ -222,7 +222,7 @@
         const infoWindows = {}; 
         
         let userMessage = ""; 
-        let isMapCentered = false; 
+        let isMapCentered = false; // Flag to center map only on first successful location find
         
         /** @type {Object<string, google.maps.Polyline>} */
         const userPolylines = {}; 
@@ -235,7 +235,7 @@
         const userIdDisplay = document.getElementById('user-id-display');
         const mapContainer = document.getElementById('map');
         const authContainer = document.getElementById('auth-container');
-        const appContainer = document.getElementById('app-container'); // NEW
+        const appContainer = document.getElementById('app-container'); 
 
         const loginCard = document.getElementById('login-card');
         const registerCard = document.getElementById('register-card');
@@ -542,7 +542,8 @@
 
             const pos = myMarker.getPosition();
             
-            await updateFirestoreLocation(pos.lat(), pos.lng(), true);
+            // Only update the message property, but we must update the doc to trigger the snapshot listener
+            await updateFirestoreLocation(pos.lat(), pos.lng(), true, true);
             
             const currentUser = auth.currentUser;
             const displayId = currentUser.displayName || currentUser.email || userId;
@@ -557,7 +558,15 @@
 
 
         // --- Geolocation and Firestore Data Management ---
-        const updateFirestoreLocation = async (lat, lng, isTracking) => {
+        
+        /**
+         * Updates or deletes the current user's location document in Firestore.
+         * @param {number} lat Latitude.
+         * @param {number} lng Longitude.
+         * @param {boolean} isTracking True if user is actively tracking.
+         * @param {boolean} isMessageUpdate True if this is an explicit message update, prevents path recording.
+         */
+        const updateFirestoreLocation = async (lat, lng, isTracking, isMessageUpdate = false) => {
             if (!db || !userId || userId === 'anonymous') return;
 
             const userDocRef = doc(db, getPublicCollectionPath('user_locations'), userId);
@@ -565,20 +574,27 @@
             if (isTracking) {
                 const currentUser = auth.currentUser;
                 const displayId = currentUser.displayName || currentUser.email || userId;
-
+                
+                // Only include lat/lng/timestamp if not just a message update 
                 const data = {
-                    lat: lat,
-                    lng: lng,
                     timestamp: new Date().getTime(),
                     displayId: displayId, 
                     isTracking: true,
                     message: userMessage || 'No status set' 
                 };
-                await setDoc(userDocRef, data);
+
+                // Location data should only be updated if it's a genuine location update
+                // to minimize writes, but for simplicity here we include it if it's not JUST a message update
+                // However, since geoSuccess is called frequently, we assume lat/lng are fresh here.
+                data.lat = lat;
+                data.lng = lng;
+
+                await setDoc(userDocRef, data, { merge: true });
+
             } else {
                 await deleteDoc(userDocRef);
-                removeMarker(userId);
-                fitMapToBounds();
+                removeMarker(userId); 
+                // Removed: fitMapToBounds() here to prevent auto-zoom on self-stop
             }
         };
 
@@ -686,8 +702,8 @@
                 bounds.extend(userMarkers[id].getPosition());
             });
 
-            if (activeMarkers.length === 1 && activeMarkers[0] === userId) {
-                 map.panTo(userMarkers[userId].getPosition());
+            if (activeMarkers.length === 1) {
+                 map.panTo(userMarkers[activeMarkers[0]].getPosition());
                  if (map.getZoom() < 10) map.setZoom(15); 
             } else {
                 map.fitBounds(bounds);
@@ -710,7 +726,7 @@
             const colRef = collection(db, getPublicCollectionPath('user_locations'));
 
             onSnapshot(colRef, (snapshot) => {
-                let shouldFitBounds = false; 
+                // Removed: Logic for shouldFitBounds to stop automatic map fitting
 
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
@@ -719,31 +735,30 @@
                     const message = data.message || ''; 
                     
                     if (targetUserId === userId) {
+                        // Handle changes for the current user only
                         if (change.type === "removed" || !data.isTracking) {
                             removeMarker(targetUserId);
-                            fitMapToBounds(); 
+                            // Removed: fitMapToBounds() when self-removal happens
                         }
                         if (data.isTracking && data.message !== userMessage) {
+                            // Update local message state if someone else modified our doc (shouldn't happen)
                             userMessage = message;
                             messageInput.value = message;
                         }
                         return;
                     }
 
+                    // Handle changes for other users
                     if (change.type === "removed" || !data.isTracking) {
                         removeMarker(targetUserId);
-                        shouldFitBounds = true;
                     } else if (change.type === "added" || change.type === "modified") {
                         if (data.lat !== undefined && data.lng !== undefined && data.isTracking) {
                             updateMarker(targetUserId, data.lat, data.lng, data.timestamp, displayId, message);
-                            shouldFitBounds = true;
                         }
                     }
                 });
                 
-                if (shouldFitBounds) {
-                    fitMapToBounds();
-                }
+                // Removed: The final call to fitMapToBounds()
 
             }, (error) => {
                 console.error("Error listening to Firestore location updates:", error);
@@ -818,6 +833,7 @@
             }
             
             const lastPos = userPaths[id][userPaths[id].length - 1];
+            // Only add new path segment if position is actually different (avoids recording static points)
             const isDifferent = !lastPos || (lastPos.lat.toFixed(6) !== lat.toFixed(6) || lastPos.lng.toFixed(6) !== lng.toFixed(6));
             
             if (isDifferent) {
@@ -829,7 +845,7 @@
 
             if (polyline) {
                 polyline.setPath(userPaths[id]);
-                // Only update the path, but keep the dotted style options
+                // Update the style options (important for self-vs-other color/size differences)
                 polyline.setOptions(polylineOptions); 
             } else {
                 polyline = new google.maps.Polyline({
@@ -870,7 +886,7 @@
         });
         
         sendMessageBtn.addEventListener('click', sendMessageUpdate);
-        fitToAllBtn.addEventListener('click', fitMapToBounds);
+        fitToAllBtn.addEventListener('click', fitMapToBounds); // Explicitly called only by button
 
         // Toggle login/register card views
         document.getElementById('switch-to-register').addEventListener('click', () => {
