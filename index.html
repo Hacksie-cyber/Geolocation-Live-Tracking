@@ -3,43 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Location Tracker (Explicit Status Update)</title>
+    <title>Collaborative Location Share - Login</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom styles for the map container */
-        #map {
-            /* Adjusted height to account for the slightly larger header/controls area */
-            height: calc(100vh - 200px); 
-            width: 100%;
-            border-radius: 0.75rem; /* rounded-xl */
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }
+        /* Custom font import for aesthetics */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
+        /* 1. Full-screen centering for the Auth card */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb;
+            background-color: #f7f9fb; /* Light background */
+            min-height: 100vh;
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 1rem; 
+            margin: 0;
+            flex-direction: column; /* Allows content flow if not centered */
         }
-        .auth-container {
-            /* Adjusted height for alignment */
-            height: calc(100vh - 200px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        
+        /* 2. Map height when the app is visible */
+        #map {
+            height: calc(100vh - 220px); /* Adjusted height for full app view */
+            width: 100%;
+            border-radius: 1rem; 
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.15);
         }
-        /* Custom styling for the InfoWindow content */
+        
+        /* Info window style */
         .info-window {
-            font-size: 0.875rem; /* text-sm */
+            font-size: 0.875rem;
         }
-        /* Media query to ensure map height adjusts correctly when the footer is present */
-        @media (min-width: 1024px) {
-             #map {
-                /* On desktop, make room for header and footer */
-                height: calc(100vh - 220px); 
-            }
-            .auth-container {
-                /* On desktop, center auth card correctly */
-                height: calc(100vh - 220px);
-            }
+
+        /* Override body centering when the main app is active (handled by JS) */
+        .app-active-layout {
+            display: block !important;
+            padding: 1.5rem;
         }
     </style>
     <!-- Google Maps API Script - Includes all necessary services -->
@@ -47,105 +47,56 @@
 </head>
 <body class="p-4 md:p-6">
 
-    <!-- MAIN CONTENT CONTAINER (Centers app on large screens) -->
-    <div class="max-w-6xl mx-auto">
-        <!-- UPDATED HEADER WITH RESPONSIVE SPACING -->
-        <header class="mb-6 flex flex-col bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-2xl">
-            <!-- Title Section - Reduced mb-4 to mb-1 -->
-            <div class="flex items-center justify-center lg:justify-start mb-1">
-                <h1 class="text-3xl font-extrabold text-gray-800">
-                    <svg class="inline w-7 h-7 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                    Collaborative Location Share
-                </h1>
-            </div>
-
-            <!-- Controls Section - Reduced mt-4 to mt-1 -->
-            <div class="mt-1 pt-4 border-t border-gray-100 flex flex-col lg:flex-row items-start lg:items-center space-y-4 lg:space-y-0 lg:space-x-6 w-full">
-                
-                <!-- User ID Display (Full width on all screens for prominence) -->
-                <span id="user-id-display" class="text-xs font-mono text-gray-500 bg-gray-100 p-2 rounded-lg truncate w-full lg:w-auto lg:flex-grow-0">
-                    Connecting...
-                </span>
-                
-                <!-- Message Input Field and Button (takes up the available space on desktop) -->
-                <div id="message-control" class="hidden flex items-center space-x-2 w-full lg:flex-grow">
-                    <input type="text" id="user-message-input" placeholder="Your status (visible on marker click)..." maxlength="100" class="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-                    <span id="message-status-indicator" class="text-xs text-gray-500 min-w-[50px] transition-opacity duration-300"></span>
-                    <!-- Send Status Button: Now the ONLY way to update the message -->
-                    <button id="send-message-btn" class="px-3 py-2 text-white bg-blue-500 hover:bg-blue-600 font-semibold rounded-lg transition duration-150 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title="Send immediate status update" disabled>
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                    </button>
-                    <!-- END Send Message Button -->
-                </div>
-                
-                <!-- Control Buttons - Stack vertically on small mobile, row on larger screens -->
-                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full lg:w-auto lg:min-w-[380px]">
-                    <!-- Fit to All Users Button -->
-                    <button id="fit-to-all-btn" class="flex-grow px-4 py-2 text-white bg-indigo-500 hover:bg-indigo-600 font-semibold rounded-lg transition duration-150 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled>
-                        Fit to all users
-                    </button>
-                    <!-- END NEW BUTTON -->
-                    <button id="logout-btn" class="hidden flex-grow px-4 py-2 text-white bg-gray-500 hover:bg-gray-600 font-semibold rounded-lg transition duration-150 shadow-md">
-                        Logout
-                    </button>
-                    <button id="toggle-tracking-btn" class="hidden flex-grow px-4 py-2 text-white font-semibold rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-green-500 hover:bg-green-600" disabled>
-                        Start Sharing Location
-                    </button>
-                </div>
-            </div>
-        </header>
-
-        <!-- Map container (Hidden until authenticated) -->
-        <div id="map" class="hidden"></div>
-
-        <!-- Authentication Forms Container -->
-        <div id="auth-container" class="auth-container">
-            <!-- Login Form -->
-            <div id="login-card" class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md transition duration-300 border border-blue-100">
-                 <!-- Enhanced Header with Icon -->
+    <!-- AUTHENTICATION FORMS CONTAINER (Only visible before login, centered) -->
+    <div id="auth-container" class="w-full max-w-md">
+        <div class="bg-white p-8 md:p-10 rounded-2xl shadow-2xl w-full transition duration-300 border border-gray-200">
+            
+            <!-- Login Card (Default Visible) -->
+            <div id="login-card">
+                <!-- Title Section -->
                 <div class="flex flex-col items-center mb-6">
-                    <!-- Simple SVG Icon (Lock/Key) -->
-                    <svg class="w-10 h-10 text-blue-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v3h8z"></path></svg>
-                    <h2 class="text-3xl font-extrabold text-blue-700 text-center">Log In</h2>
+                    <svg class="w-10 h-10 text-indigo-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path></svg>
+                    <h2 class="text-3xl font-extrabold text-indigo-700 text-center">Welcome Back</h2>
+                    <p class="mt-1 text-sm text-gray-500">Sign in to start tracking</p>
                 </div>
+
                 <form id="login-form">
                     <div class="mb-4">
                         <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
-                        <input type="email" id="login-email" required class="mt-1 block w-full px-4 py-3 border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <input type="email" id="login-email" required class="mt-1 block w-full px-4 py-3 border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                     <div class="mb-4 relative">
                         <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
-                        <input type="password" id="login-password" required minlength="6" class="mt-1 block w-full px-4 py-3 border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <input type="password" id="login-password" required minlength="6" class="mt-1 block w-full px-4 py-3 border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                         <div class="mt-2 flex items-center">
-                            <input type="checkbox" id="login-show-password" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                            <input type="checkbox" id="login-show-password" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                             <label for="login-show-password" class="ml-2 block text-sm text-gray-900">Show Password</label>
                         </div>
                     </div>
-                    <p id="login-error" class="text-red-500 text-sm mb-4 hidden"></p>
-                    <button type="submit" class="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-blue-700 transition duration-200 shadow-lg shadow-blue-500/50 active:scale-[0.99]">
+                    <p id="login-error" class="text-red-500 text-sm mb-4 hidden font-medium"></p>
+                    <button type="submit" class="w-full bg-indigo-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-indigo-700 transition duration-200 shadow-lg shadow-indigo-500/50 active:scale-[0.99]">
                         Log In
                     </button>
                 </form>
                 <p class="mt-6 text-center text-sm text-gray-600">
-                    Don't have an account? <button id="switch-to-register" class="text-blue-600 hover:text-blue-800 font-extrabold hover:underline">Register here</button>
+                    Need an account? <button id="switch-to-register" class="text-green-600 hover:text-green-800 font-extrabold hover:underline">Register here</button>
                 </p>
             </div>
 
-            <!-- Registration Form (Initially Hidden) -->
-            <div id="register-card" class="hidden bg-white p-8 rounded-2xl shadow-xl w-full max-w-md transition duration-300 border border-green-100">
-                <!-- Enhanced Header with Icon -->
+            <!-- Registration Card (Initially Hidden) -->
+            <div id="register-card" class="hidden">
+                <!-- Title Section -->
                 <div class="flex flex-col items-center mb-6">
-                    <!-- Simple SVG Icon (User/Check) -->
-                    <svg class="w-10 h-10 text-green-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM12 14v4m-4 0h8"></path></svg>
-                    <h2 class="text-3xl font-extrabold text-green-700 text-center">Register</h2>
+                    <svg class="w-10 h-10 text-green-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    <h2 class="text-3xl font-extrabold text-green-700 text-center">Create Account</h2>
+                    <p class="mt-1 text-sm text-gray-500">Join the map in minutes</p>
                 </div>
+
                 <form id="register-form">
-                    <!-- USERNAME FIELD -->
                     <div class="mb-4">
                         <label for="register-username" class="block text-sm font-medium text-gray-700">Username</label>
                         <input type="text" id="register-username" required class="mt-1 block w-full px-4 py-3 border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
                     </div>
-                    <!-- END USERNAME FIELD -->
                     <div class="mb-4">
                         <label for="register-email" class="block text-sm font-medium text-gray-700">Email</label>
                         <input type="email" id="register-email" required class="mt-1 block w-full px-4 py-3 border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
@@ -158,30 +109,81 @@
                         <label for="register-confirm-password" class="block text-sm font-medium text-gray-700">Confirm Password</label>
                         <input type="password" id="register-confirm-password" required minlength="6" class="mt-1 block w-full px-4 py-3 border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
                         <div class="mt-2 flex items-center">
-                            <input type="checkbox" id="register-show-password" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-green-500">
+                            <input type="checkbox" id="register-show-password" class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
                             <label for="register-show-password" class="ml-2 block text-sm text-gray-900">Show Passwords</label>
                         </div>
                     </div>
-                    <p id="register-error" class="text-red-500 text-sm mb-4 hidden"></p>
+                    <p id="register-error" class="text-red-500 text-sm mb-4 hidden font-medium"></p>
                     <button type="submit" class="w-full bg-green-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-green-700 transition duration-200 shadow-lg shadow-green-500/50 active:scale-[0.99]">
                         Register
                     </button>
                 </form>
                 <p class="mt-6 text-center text-sm text-gray-600">
-                    Already have an account? <button id="switch-to-login" class="text-blue-600 hover:text-blue-800 font-extrabold hover:underline">Log in here</button>
+                    Already registered? <button id="switch-to-login" class="text-indigo-600 hover:text-indigo-800 font-extrabold hover:underline">Log in here</button>
                 </p>
             </div>
         </div>
+    </div>
 
-        <!-- BEAUTIFUL FOOTER -->
+
+    <!-- MAIN APPLICATION CONTAINER (Hidden until authenticated) -->
+    <div id="app-container" class="hidden max-w-6xl mx-auto">
+        <!-- HEADER (Now contained within the app-container) -->
+        <header class="mb-6 flex flex-col bg-white p-4 sm:p-6 rounded-2xl shadow-2xl">
+            <!-- Title Section -->
+            <div class="flex items-center justify-center lg:justify-start mb-2">
+                <h1 class="text-3xl font-extrabold text-gray-800 flex items-center">
+                    <svg class="inline w-7 h-7 mr-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 8 0111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Collaborative Location Share
+                </h1>
+            </div>
+
+            <!-- Controls Section -->
+            <div class="pt-4 border-t border-gray-100 flex flex-col lg:flex-row items-start lg:items-center space-y-4 lg:space-y-0 lg:space-x-4 w-full">
+                
+                <!-- User ID Display -->
+                <span id="user-id-display" class="text-xs font-mono text-gray-500 bg-gray-100 p-2 rounded-lg truncate w-full lg:w-auto lg:flex-grow-0 min-w-[200px]">
+                    Connecting...
+                </span>
+                
+                <!-- Message Input Field and Button -->
+                <div id="message-control" class="hidden flex items-center space-x-2 w-full lg:flex-grow">
+                    <input type="text" id="user-message-input" placeholder="Your status (visible on marker click)..." maxlength="100" class="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+                    <span id="message-status-indicator" class="text-xs text-gray-500 min-w-[50px] transition-opacity duration-300"></span>
+                    <button id="send-message-btn" class="px-3 py-2 text-white bg-indigo-500 hover:bg-indigo-600 font-semibold rounded-lg transition duration-150 ease-in-out shadow-md disabled:opacity-50" title="Send immediate status update" disabled>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                    </button>
+                </div>
+                
+                <!-- Control Buttons -->
+                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full lg:w-auto lg:min-w-[400px]">
+                    <button id="fit-to-all-btn" class="flex-grow px-4 py-2 text-white bg-gray-500 hover:bg-gray-600 font-semibold rounded-lg transition duration-150 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-gray-500" disabled>
+                        Fit to All Users
+                    </button>
+                    <!-- LOG OUT BUTTON -->
+                    <button id="logout-btn" class="hidden flex-grow px-4 py-2 text-white bg-red-500 hover:bg-red-600 font-semibold rounded-lg transition duration-150 shadow-md">
+                        Logout
+                    </button>
+                    <!-- SHARE LOCATION BUTTON -->
+                    <button id="toggle-tracking-btn" class="hidden flex-grow px-4 py-2 text-white font-semibold rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 bg-green-500 hover:bg-green-600 focus:ring-green-500" disabled>
+                        Start Sharing Location
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Map container -->
+        <div id="map" class=""></div>
+
+        <!-- FOOTER (Now contained within the app-container) -->
         <footer class="mt-6 p-4 text-center text-gray-500 text-sm bg-white rounded-2xl shadow-lg border-t border-gray-100">
-            <p>Real-Time Location Share - Collaborative Mapping Demo</p>
+            <p>Collaborative Location Share - Real-Time Mapping Demo</p>
             <p class="text-xs mt-1 text-gray-400">Powered by Firebase & Google Maps API</p>
         </footer>
     </div>
 
 
-    <!-- Firebase SDKs -->
+    <!-- Firebase SDKs and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
@@ -192,7 +194,7 @@
         // IMPORTANT: Set debug logging for Firestore
         setLogLevel('Debug');
 
-        // Hardcoded Firebase configuration provided by the user (overrides __firebase_config)
+        // Hardcoded Firebase configuration (Replace with actual if available)
         const userProvidedFirebaseConfig = {
             apiKey: "AIzaSyCbr-2Hvxg4AEfFb51lGoYYepxLOie4JiQ",
             authDomain: "track-your-journey.firebaseapp.com",
@@ -232,6 +234,8 @@
         const userIdDisplay = document.getElementById('user-id-display');
         const mapContainer = document.getElementById('map');
         const authContainer = document.getElementById('auth-container');
+        const appContainer = document.getElementById('app-container'); // NEW
+
         const loginCard = document.getElementById('login-card');
         const registerCard = document.getElementById('register-card');
         const fitToAllBtn = document.getElementById('fit-to-all-btn'); 
@@ -261,15 +265,15 @@
         // --- Custom Google Maps Icon Definitions ---
         const MY_MARKER_ICON = {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#3b82f6', // Blue (blue-500)
+            fillColor: '#4f46e5', // Indigo-600 (Self)
             fillOpacity: 1,
             strokeWeight: 4,
-            strokeColor: '#bfdbfe', // Light Blue outline
+            strokeColor: '#e0e7ff', // Light Indigo outline
             scale: 8, 
         };
         const OTHER_MARKER_ICON = {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#dc2626', // Darker Red (red-600)
+            fillColor: '#dc2626', // Red-600 (Others)
             fillOpacity: 1,
             strokeWeight: 2,
             strokeColor: '#fca5a5', // Lighter Red outline
@@ -279,43 +283,45 @@
 
         // --- Utility Functions ---
 
-        /**
-         * Safely gets the Firestore document path for a public collection.
-         * @param {string} collectionName
-         * @returns {string} The full path.
-         */
         const getPublicCollectionPath = (collectionName) => {
             return `/artifacts/${appId}/public/data/${collectionName}`;
         };
 
-        /**
-         * Generates a consistent hex color from a string ID (for polyline colors).
-         * @param {string} id - The user ID.
-         * @returns {string} A hex color string (e.g., #A3B5C7).
-         */
         const getColorFromId = (id) => {
             let hash = 0;
             for (let i = 0; i < id.length; i++) {
                 hash = id.charCodeAt(i) + ((hash << 5) - hash);
             }
-            // Use a color palette that contrasts with the blue/red markers
             const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
             return "#" + "00000".substring(0, 6 - c.length) + c;
         };
         
         const toggleAppUI = (isAuthenticated) => {
             if (isAuthenticated) {
-                mapContainer.classList.remove('hidden');
-                toggleBtn.classList.remove('hidden');
-                logoutBtn.classList.remove('hidden');
-                messageControl.classList.remove('hidden'); // Show message controls
                 authContainer.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                
+                // Set body style for standard app layout
+                document.body.classList.add('app-active-layout'); 
+                document.body.classList.remove('flex', 'items-center', 'justify-center');
+                
+                toggleBtn.disabled = false;
+                fitToAllBtn.disabled = false; 
+                logoutBtn.classList.remove('hidden'); // Show Logout
+                messageControl.classList.remove('hidden'); // Show Message Controls
+
             } else {
-                mapContainer.classList.add('hidden');
-                toggleBtn.classList.add('hidden');
-                logoutBtn.classList.add('hidden');
-                messageControl.classList.add('hidden'); // Hide message controls
                 authContainer.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                
+                // Set body style for centered auth card
+                document.body.classList.remove('app-active-layout');
+                document.body.classList.add('flex', 'items-center', 'justify-center');
+                
+                toggleBtn.disabled = true;
+                fitToAllBtn.disabled = true; 
+                logoutBtn.classList.add('hidden'); // Hide Logout
+                messageControl.classList.add('hidden'); // Hide Message Controls
             }
         };
 
@@ -338,7 +344,7 @@
                     <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 md:w-1/3">
                         <h3 class="text-lg font-bold text-red-600 mb-4">Notification</h3>
                         <p class="text-gray-700 mb-6">${message}</p>
-                        <button id="modal-close-btn" class="w-full bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600 transition duration-150">
+                        <button id="modal-close-btn" class="w-full bg-indigo-500 text-white py-2 rounded-lg font-semibold hover:bg-indigo-600 transition duration-150">
                             OK
                         </button>
                     </div>
@@ -356,56 +362,49 @@
 
         const initializeFirebase = async () => {
             try {
-                // 1. Initialize Firebase App
                 app = initializeApp(userProvidedFirebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
                 getAnalytics(app); 
 
-                // 2. IMMEDIATE TOKEN SIGN-IN ATTEMPT (FIX FOR LOADING HANG)
                 if (initialAuthToken) {
                     userIdDisplay.textContent = 'Authenticating...';
                     try {
-                        // Attempt to sign in with the custom token provided by the environment
                         await signInWithCustomToken(auth, initialAuthToken);
-                        // The onAuthStateChanged listener below will catch the successful sign-in
                     } catch (error) {
                         console.error("Custom Token Sign-In Failed:", error);
-                        // If token fails, the listener will proceed with a signed-out state.
                     }
                 } else {
-                    // If no token, we are just waiting for manual login.
-                    userIdDisplay.textContent = 'Waiting for login...';
+                    userIdDisplay.textContent = 'Please log in or register.';
+                    toggleAppUI(false); // Ensure forms are visible if no token
                 }
 
-                // 3. Set up the definitive auth state change listener
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         // --- AUTH SUCCESS STATE ---
                         userId = user.uid;
-                        // Prioritize username (displayName), then email, then userId
                         const displayIdentifier = user.displayName || user.email || userId;
                         userIdDisplay.textContent = `User ID: ${displayIdentifier}`;
                         
                         toggleAppUI(true);
-                        toggleBtn.disabled = false;
-                        fitToAllBtn.disabled = false; 
 
-                        // Set initial button style
+                        // Initial button style
                         if (!isTracking) {
                             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
                             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
+                            toggleBtn.classList.remove('hidden'); // Show Share Location Button
+                            logoutBtn.classList.remove('hidden'); // Show Logout Button
                         }
 
                         setupRealTimeLocationListener();
                     } else {
                         // --- AUTH SIGNED OUT STATE ---
                         userId = 'anonymous';
-                        // FIX: Explicitly set the message when logged out. 
                         userIdDisplay.textContent = 'Please log in or register.';
                         toggleAppUI(false);
-                        fitToAllBtn.disabled = true; 
                         sendMessageBtn.disabled = true; 
+                        // Clean up markers/polylines for all users
+                        Object.keys(userMarkers).forEach(removeMarker);
                     }
                 });
 
@@ -430,13 +429,11 @@
                 registerError.classList.remove('hidden');
                 return;
             }
-
             if (password.length < 6) {
                 registerError.textContent = 'Password must be at least 6 characters.';
                 registerError.classList.remove('hidden');
                 return;
             }
-            
             if (username.length === 0) {
                  registerError.textContent = 'Username is required.';
                 registerError.classList.remove('hidden');
@@ -445,7 +442,6 @@
 
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                // Update profile with the display name (username) immediately after creation
                 await updateProfile(userCredential.user, { displayName: username });
             } catch (error) {
                 console.error("Registration Error:", error.message);
@@ -469,17 +465,10 @@
             }
         };
 
-        /**
-         * Stops location tracking and signs out the user.
-         * Location deletion (privacy) is prioritized before sign-out.
-         */
         const handleLogout = async () => {
-            // PRIORITY 1: Ensure location sharing is immediately stopped and data is deleted.
             if (isTracking) {
                 await stopTracking(); 
             }
-            
-            // PRIORITY 2: Log the user out of Firebase.
             try {
                 await signOut(auth);
             } catch (error) {
@@ -488,10 +477,6 @@
             }
         };
         
-        /**
-         * Handles the click on the new send message button.
-         * Forces an immediate Firestore update of the current message status.
-         */
         const sendMessageUpdate = async () => {
             if (!isTracking) {
                 messageStatusIndicator.textContent = 'Track to send.';
@@ -508,25 +493,18 @@
                 return;
             }
             
-            // 1. Update the official userMessage state from the input field's current value
             userMessage = messageInput.value.trim();
-
-            // 2. Show sending indicator
             messageStatusIndicator.textContent = 'Sending...';
             messageStatusIndicator.classList.remove('hidden');
 
             const pos = myMarker.getPosition();
             
-            // 3. Force the Firestore update using the last known coordinates and the new message
             await updateFirestoreLocation(pos.lat(), pos.lng(), true);
             
-            // 4. Update the local marker/info window immediately
             const currentUser = auth.currentUser;
             const displayId = currentUser.displayName || currentUser.email || userId;
-            // Pass the updated userMessage global state
             updateMarker(userId, pos.lat(), pos.lng(), new Date().getTime(), displayId, userMessage);
 
-            // 5. Show success and hide
             messageStatusIndicator.textContent = 'Status Sent!';
             setTimeout(() => {
                 messageStatusIndicator.textContent = '';
@@ -539,30 +517,24 @@
         const updateFirestoreLocation = async (lat, lng, isTracking) => {
             if (!db || !userId || userId === 'anonymous') return;
 
-            // Use public collection so other authenticated users can see this location
             const userDocRef = doc(db, getPublicCollectionPath('user_locations'), userId);
 
             if (isTracking) {
-                // Determine the display ID to store (Username > Email > UID)
                 const currentUser = auth.currentUser;
                 const displayId = currentUser.displayName || currentUser.email || userId;
 
-                // This updates/overwrites the single location document 
                 const data = {
                     lat: lat,
                     lng: lng,
                     timestamp: new Date().getTime(),
                     displayId: displayId, 
                     isTracking: true,
-                    // The userMessage variable holds the last explicitly sent message.
                     message: userMessage || 'No status set' 
                 };
                 await setDoc(userDocRef, data);
             } else {
-                // TEMPORARY STORAGE CLEANUP: Delete the user's location document when tracking is stopped or user logs out.
                 await deleteDoc(userDocRef);
                 removeMarker(userId);
-                // After removing self, recalculate bounds to fit remaining users
                 fitMapToBounds();
             }
         };
@@ -572,23 +544,21 @@
             const lng = position.coords.longitude;
             const pos = { lat, lng };
 
-            // Enable the send message button after the first successful location update
             sendMessageBtn.disabled = false;
+            sendMessageBtn.classList.remove('hidden'); // Show send button when tracking starts
 
             // Update UI to final tracking state (Red Button)
             toggleBtn.textContent = 'Stop Sharing Location';
-            toggleBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
+            toggleBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500', 'bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
             toggleBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
 
 
             // 1. Update own location in public Firestore (for OTHERS to see).
-            // NOTE: Location updates happen automatically via geoSuccess, but the MESSAGE ONLY updates via the button.
             updateFirestoreLocation(lat, lng, true);
 
             // 2. Immediately update the local map marker for the current user 
             const currentUser = auth.currentUser;
             const displayId = currentUser.displayName || currentUser.email || userId;
-            // Pass the current userMessage global state
             updateMarker(userId, lat, lng, new Date().getTime(), displayId, userMessage); 
             
             // 3. Center map and zoom in on start (if flag is set)
@@ -601,19 +571,19 @@
 
         const geoError = (error) => {
             console.error("Geolocation Error:", error.message);
-            // Improved modal message for common iOS permission issues
             let errorMsg = `Location Error: ${error.message}. Please ensure location permissions are set to 'Allow' (not 'Ask Next Time') in your browser settings.`;
-            if (error.code === 1) { // PERMISSION_DENIED
+            if (error.code === 1) { 
                  errorMsg = "Location permission denied. Please check your device and browser settings to allow location access.";
-            } else if (error.code === 3) { // TIMEOUT
-                 errorMsg = "Location request timed out. This often happens on iOS if you deny access or your network is unstable. Please retry.";
+            } else if (error.code === 3) { 
+                 errorMsg = "Location request timed out. Please check network/permissions and retry.";
             }
             showModal(errorMsg);
 
             isTracking = false;
-            sendMessageBtn.disabled = true; // Disable button on error
+            sendMessageBtn.disabled = true; 
+            sendMessageBtn.classList.add('hidden'); // Hide send button
             toggleBtn.textContent = 'Start Sharing Location';
-            toggleBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500', 'bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
+            toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
         };
 
@@ -627,51 +597,41 @@
 
             // Update UI to 'Waiting' state immediately (Yellow Button)
             isTracking = true;
-            sendMessageBtn.disabled = true; // Initially disabled until first location is found
+            sendMessageBtn.disabled = true; 
+            sendMessageBtn.classList.remove('hidden'); // Show message controls while waiting
             toggleBtn.textContent = 'Waiting for location...';
             toggleBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500', 'bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
             toggleBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
 
             // --- CRITICAL FIX FOR IOS RELIABILITY ---
-            // Set maximumAge to 0 to force the device to get a fresh location reading, 
-            // which often prevents iOS from aggressively throttling the watchPosition callback.
             watchId = navigator.geolocation.watchPosition(geoSuccess, geoError, {
                 enableHighAccuracy: true,
-                maximumAge: 0, // IMPORTANT: Force fresh location reading
-                timeout: 15000 // Increased timeout for slower iOS fixes
+                maximumAge: 0, // IMPORTANT: Force fresh location reading for iOS
+                timeout: 15000 
             });
-            // --- END CRITICAL FIX ---
         };
 
         const stopTracking = async () => {
-            // 1. Stop the Geolocation API watcher
             if (watchId !== null) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }
             
-            // 2. Immediately update local state and UI
             isTracking = false;
-            sendMessageBtn.disabled = true; // Disable button when tracking stops
+            sendMessageBtn.disabled = true; 
+            sendMessageBtn.classList.add('hidden'); // Hide send button
             toggleBtn.textContent = 'Start Sharing Location';
             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
 
-            // 3. Perform asynchronous cleanup on Firestore (THIS DELETES THE LOCATION)
-            // Passing false here triggers the deleteDoc logic in updateFirestoreLocation
             await updateFirestoreLocation(0, 0, false);
         };
 
         // --- Map and Marker Management (Google Maps) ---
         
-        /**
-         * Calculates the minimum bounding box to include all active markers
-         * and adjusts the map view.
-         */
         const fitMapToBounds = () => {
             const activeMarkers = Object.keys(userMarkers);
             if (activeMarkers.length === 0) {
-                // If no markers, center on a default world view
                 map.setCenter({ lat: 0, lng: 0 });
                 map.setZoom(2);
                 return;
@@ -679,26 +639,19 @@
 
             const bounds = new google.maps.LatLngBounds();
             
-            // Extend the bounds to include all markers
             activeMarkers.forEach(id => {
                 bounds.extend(userMarkers[id].getPosition());
             });
 
-            // If there's only one marker (the current user), pan to them
             if (activeMarkers.length === 1 && activeMarkers[0] === userId) {
-                 // Do not reset isMapCentered here, only pan/zoom on self if needed
                  map.panTo(userMarkers[userId].getPosition());
                  if (map.getZoom() < 10) map.setZoom(15); 
             } else {
-                // If multiple users exist, fit the map to show everyone
                 map.fitBounds(bounds);
             }
         };
 
 
-        /**
-         * Initializes the Google map.
-         */
         const initializeMap = () => {
             map = new google.maps.Map(mapContainer, {
                 center: { lat: 0, lng: 0 }, 
@@ -713,48 +666,38 @@
 
             const colRef = collection(db, getPublicCollectionPath('user_locations'));
 
-            // Listen for all location changes in the public collection
             onSnapshot(colRef, (snapshot) => {
-                let shouldFitBounds = false; // Flag to batch map fitting
+                let shouldFitBounds = false; 
 
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
                     const targetUserId = change.doc.id;
                     const displayId = data.displayId || targetUserId; 
-                    const message = data.message || ''; // Get the message
+                    const message = data.message || ''; 
                     
-                    // Filter out the current user's document from the listener
                     if (targetUserId === userId) {
                         if (change.type === "removed" || !data.isTracking) {
                             removeMarker(targetUserId);
                             fitMapToBounds(); 
                         }
-                        // Update local message state/input if tracking is on (if another tab set the message)
                         if (data.isTracking && data.message !== userMessage) {
                             userMessage = message;
                             messageInput.value = message;
                         }
-                        return; // Skip further processing for self
+                        return;
                     }
-                    // --- END FILTER ---
-
 
                     if (change.type === "removed" || !data.isTracking) {
                         removeMarker(targetUserId);
                         shouldFitBounds = true;
                     } else if (change.type === "added" || change.type === "modified") {
-                        // Only update if location data exists and tracking is active
                         if (data.lat !== undefined && data.lng !== undefined && data.isTracking) {
-                            // Pass the message from Firestore to the marker update
                             updateMarker(targetUserId, data.lat, data.lng, data.timestamp, displayId, message);
-                            
-                            // Flag to fit bounds if any *other* user's location changes
                             shouldFitBounds = true;
                         }
                     }
                 });
                 
-                // Perform the fitBounds once after processing all changes for *other* users
                 if (shouldFitBounds) {
                     fitMapToBounds();
                 }
@@ -765,9 +708,6 @@
         };
         
 
-        /**
-         * Updates or creates a marker and its corresponding movement line on the map.
-         */
         const updateMarker = (id, lat, lng, timestamp, displayId, message) => {
             const isSelf = id === userId;
             const position = { lat: lat, lng: lng };
@@ -778,41 +718,31 @@
             let marker = userMarkers[id];
             let infoWindow = infoWindows[id];
 
-            const markerLabel = null; 
-
-            // 2. Marker Logic
             if (marker) {
                 marker.setPosition(position);
                 marker.setIcon(icon);
                 marker.setTitle(markerTitle);
-                marker.setLabel(markerLabel); 
             } else {
                 marker = new google.maps.Marker({
                     position: position,
                     map: map,
                     title: markerTitle, 
                     icon: icon,
-                    label: markerLabel, 
                 });
 
                 userMarkers[id] = marker;
 
-                // Create InfoWindow
                 infoWindow = new google.maps.InfoWindow({ content: 'Location Info' });
                 infoWindows[id] = infoWindow;
 
-                // Add click listener to show InfoWindow
                 marker.addListener('click', () => {
-                    // Close all other InfoWindows
                     Object.values(infoWindows).forEach(iw => iw.close());
                     
-                    // Use the global userMessage for self, as it's the most up-to-date source of truth.
                     const messageToShow = isSelf ? userMessage : message;
 
-                    // --- UPDATED POPUP CONTENT (COORDINATES AND MESSAGE ONLY) ---
                     const popupContent = `
                         <div class="info-window p-1">
-                            <div class="text-base font-bold mb-1" style="color: ${isSelf ? '#3b82f6' : '#dc2626'};">${markerTitle}</div>
+                            <div class="text-base font-bold mb-1" style="color: ${isSelf ? '#4f46e5' : '#dc2626'};">${markerTitle}</div>
                             <div class="text-sm font-semibold text-gray-800 break-words mt-1">Status: ${messageToShow || 'No status set'}</div>
                             <div class="text-xs text-gray-500 mt-1">Lat: ${lat.toFixed(6)}</div>
                             <div class="text-xs text-gray-500">Lng: ${lng.toFixed(6)}</div>
@@ -825,15 +755,12 @@
                 });
             }
 
-            // 3. InfoWindow Content Update (if currently open)
-             if (infoWindow && infoWindow.getMap() === map) { 
-                  // If the InfoWindow is currently visible, refresh its content
-                  // Use the global userMessage for self when updating an open InfoWindow
+            if (infoWindow && infoWindow.getMap() === map) { 
                   const messageToShow = isSelf ? userMessage : message;
 
                   const updatedContent = `
                         <div class="info-window p-1">
-                            <div class="text-base font-bold mb-1" style="color: ${isSelf ? '#3b82f6' : '#dc2626'};">${markerTitle}</div>
+                            <div class="text-base font-bold mb-1" style="color: ${isSelf ? '#4f46e5' : '#dc2626'};">${markerTitle}</div>
                             <div class="text-sm font-semibold text-gray-800 break-words mt-1">Status: ${messageToShow || 'No status set'}</div>
                             <div class="text-xs text-gray-500 mt-1">Lat: ${lat.toFixed(6)}</div>
                             <div class="text-xs text-gray-500">Lng: ${lng.toFixed(6)}</div>
@@ -843,14 +770,11 @@
                   infoWindow.setContent(updatedContent);
             }
 
-
-            // 4. Polyline (Movement Tracking) Logic
             if (!userPaths[id]) {
                 userPaths[id] = [];
             }
             
             const lastPos = userPaths[id][userPaths[id].length - 1];
-            // Only add if position is significantly different
             const isDifferent = !lastPos || (lastPos.lat.toFixed(6) !== lat.toFixed(6) || lastPos.lng.toFixed(6) !== lng.toFixed(6));
             
             if (isDifferent) {
@@ -858,7 +782,7 @@
             }
 
             let polyline = userPolylines[id];
-            const lineColor = isSelf ? '#3b82f6' : getColorFromId(id); // Blue for self, unique color for others
+            const lineColor = isSelf ? '#4f46e5' : getColorFromId(id); 
             
             if (polyline) {
                 polyline.setPath(userPaths[id]);
@@ -880,7 +804,6 @@
                 userMarkers[id].setMap(null);
                 delete userMarkers[id];
             }
-
             if (userPolylines[id]) {
                 userPolylines[id].setMap(null); 
                 delete userPolylines[id];
@@ -888,7 +811,6 @@
             if (userPaths[id]) {
                 delete userPaths[id]; 
             }
-            
             if(infoWindows[id]) {
                 infoWindows[id].close();
                 delete infoWindows[id];
@@ -897,7 +819,6 @@
 
         // --- Event Listeners and Initial Setup ---
 
-        // Toggle tracking
         toggleBtn.addEventListener('click', async () => {
             if (isTracking) {
                 await stopTracking();
@@ -906,23 +827,21 @@
             }
         });
         
-        // Listener for the new send status button
         sendMessageBtn.addEventListener('click', sendMessageUpdate);
-
-        // NEW: Manually recenter map to fit all users
         fitToAllBtn.addEventListener('click', fitMapToBounds);
-
 
         // Toggle login/register card views
         document.getElementById('switch-to-register').addEventListener('click', () => {
             loginCard.classList.add('hidden');
             registerCard.classList.remove('hidden');
             loginError.classList.add('hidden'); 
+            registerError.classList.add('hidden');
         });
         document.getElementById('switch-to-login').addEventListener('click', () => {
             registerCard.classList.add('hidden');
             loginCard.classList.remove('hidden');
             registerError.classList.add('hidden'); 
+            loginError.classList.add('hidden');
         });
 
         // Form submissions
@@ -934,11 +853,9 @@
         loginShowPassword.addEventListener('change', () => togglePasswordVisibility('login'));
         registerShowPassword.addEventListener('change', () => togglePasswordVisibility('register'));
 
-        // Initialize map and Firebase when the window loads
         window.onload = async () => {
             await initializeFirebase();
 
-            // Wait until Google Maps API script is loaded
             const mapLoadCheck = setInterval(() => {
                 if (typeof google !== 'undefined' && google.maps) {
                     clearInterval(mapLoadCheck);
