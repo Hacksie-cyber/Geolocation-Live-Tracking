@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Collaborative Location Share - Login</title>
+    <title>Collaborative Location Share - Offline Ready</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -188,7 +188,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+        // Import enablePersistence for offline capability
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDoc, enablePersistence } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
 
@@ -443,6 +444,23 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
                 getAnalytics(app); 
+                
+                // CRITICAL: Enable Firestore persistence for offline write queuing
+                try {
+                    await enablePersistence(db);
+                    console.log("Firestore persistence enabled successfully.");
+                } catch (err) {
+                    if (err.code === 'failed-precondition') {
+                        // Multiple tabs open, persistence can only be enabled in one.
+                        console.warn("Firestore persistence failed: Multiple tabs open. Offline mode may not fully persist state.");
+                    } else if (err.code === 'unimplemented') {
+                        // The browser does not support all features needed for persistence.
+                        console.error("Firestore persistence failed: Browser not supported.");
+                    } else {
+                        console.error("Firestore persistence failed unexpectedly:", err);
+                    }
+                }
+
 
                 if (initialAuthToken) {
                     userIdDisplay.textContent = 'Authenticating...';
@@ -495,7 +513,7 @@
             }
         };
 
-        // --- Auth Handlers ---
+        // --- Auth Handlers (Same as before) ---
         const handleRegistration = async (e) => {
             e.preventDefault();
             registerError.classList.add('hidden');
@@ -595,7 +613,7 @@
         };
 
 
-        // --- Geolocation and Firestore Data Management ---
+        // --- Geolocation and Firestore Data Management (Same as before, now with offline persistence) ---
         
         /**
          * Updates or deletes the current user's location document in Firestore.
@@ -623,10 +641,11 @@
                     lng: lng
                 };
 
+                // This write operation will be queued if the user is offline
                 await setDoc(userDocRef, data, { merge: true });
 
             } else {
-                // User intentionally stopped tracking, delete the document
+                // User intentionally stopped tracking, delete the document. This deletion is also queued.
                 await deleteDoc(userDocRef);
                 removeMarker(userId); 
             }
@@ -646,7 +665,7 @@
             toggleBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
 
 
-            // 1. Update own location in public Firestore
+            // 1. Update own location in public Firestore (will be queued if offline)
             updateFirestoreLocation(lat, lng, true);
 
             // 2. Immediately update the local map marker for the current user 
@@ -739,7 +758,7 @@
             await updateFirestoreLocation(0, 0, false);
         };
 
-        // --- Map and Marker Management (Google Maps) ---
+        // --- Map and Marker Management (Same as before) ---
         
         const fitMapToBounds = () => {
             const activeMarkers = Object.keys(userMarkers);
@@ -778,6 +797,7 @@
 
             const colRef = collection(db, getPublicCollectionPath('user_locations'));
 
+            // onSnapshot will now listen to local cached data first when offline
             onSnapshot(colRef, (snapshot) => {
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
