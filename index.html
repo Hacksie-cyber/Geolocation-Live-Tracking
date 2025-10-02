@@ -707,6 +707,11 @@
             // CRITICAL: Since watchPosition failed, ensure the Firestore document is removed 
             // if it was set to true (e.g., during an automatic restart attempt).
             updateFirestoreLocation(0, 0, false); 
+
+            // FIX: Manually remove the stale marker from the map since tracking stopped
+            if (auth.currentUser && auth.currentUser.uid) {
+                 removeMarker(auth.currentUser.uid); 
+            }
         };
 
         const startTracking = () => {
