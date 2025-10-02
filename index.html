@@ -133,7 +133,7 @@
             <!-- Title Section -->
             <div class="flex items-center justify-center lg:justify-start mb-2">
                 <h1 class="text-3xl font-extrabold text-gray-800 flex items-center">
-                    <svg class="inline w-7 h-7 mr-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 8 0111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <svg class="inline w-7 h-7 mr-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 0111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     Collaborative Location Share
                 </h1>
             </div>
@@ -188,7 +188,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
 
@@ -214,7 +214,7 @@
         let userId = 'anonymous'; // Default value, updated on successful auth
         /** @type {google.maps.Map} */
         let map;
-        let isTracking = false;
+        let isTracking = false; // Tracks if watchPosition is active
         let watchId = null;
         /** @type {Object<string, google.maps.Marker>} */
         const userMarkers = {}; 
@@ -403,6 +403,40 @@
 
         // --- Firebase Initialization and Authentication ---
 
+        // Function to check if the user was previously tracking and restart the service
+        const checkAndRestartTracking = async () => {
+            if (!db || !userId || userId === 'anonymous') return;
+
+            const userDocRef = doc(db, getPublicCollectionPath('user_locations'), userId);
+            
+            // Check if a location document already exists for this user
+            try {
+                const docSnap = await getDoc(userDocRef);
+
+                if (docSnap.exists() && docSnap.data().isTracking) {
+                    console.log("Found existing tracking session, restarting geolocation.");
+                    
+                    // Set local state variables and restart the process
+                    isTracking = true;
+                    
+                    // Reset the message from the document
+                    userMessage = docSnap.data().message || '';
+                    messageInput.value = userMessage;
+
+                    // Update UI to 'Waiting' state temporarily
+                    toggleBtn.textContent = 'Restarting tracking...';
+                    toggleBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500', 'bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
+                    toggleBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
+
+                    // Restart the watchPosition loop
+                    startTracking(); 
+                }
+            } catch (e) {
+                console.error("Error checking for tracking status:", e);
+            }
+        };
+
+
         const initializeFirebase = async () => {
             try {
                 app = initializeApp(userProvidedFirebaseConfig);
@@ -431,7 +465,7 @@
                         
                         toggleAppUI(true);
 
-                        // Initial button style
+                        // Initial button style (will be overridden if tracking restarts)
                         if (!isTracking) {
                             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
                             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
@@ -440,6 +474,9 @@
                         }
 
                         setupRealTimeLocationListener();
+                        // Check for persistence and restart tracking if needed
+                        checkAndRestartTracking();
+
                     } else {
                         // --- AUTH SIGNED OUT STATE ---
                         userId = 'anonymous';
@@ -510,6 +547,7 @@
 
         const handleLogout = async () => {
             if (isTracking) {
+                // Ensure we stop tracking and delete the doc before signing out
                 await stopTracking(); 
             }
             try {
@@ -575,26 +613,22 @@
                 const currentUser = auth.currentUser;
                 const displayId = currentUser.displayName || currentUser.email || userId;
                 
-                // Only include lat/lng/timestamp if not just a message update 
+                // Store tracking intent and location data
                 const data = {
                     timestamp: new Date().getTime(),
                     displayId: displayId, 
-                    isTracking: true,
-                    message: userMessage || 'No status set' 
+                    isTracking: true, // Key for persistence across refresh
+                    message: userMessage || 'No status set',
+                    lat: lat,
+                    lng: lng
                 };
-
-                // Location data should only be updated if it's a genuine location update
-                // to minimize writes, but for simplicity here we include it if it's not JUST a message update
-                // However, since geoSuccess is called frequently, we assume lat/lng are fresh here.
-                data.lat = lat;
-                data.lng = lng;
 
                 await setDoc(userDocRef, data, { merge: true });
 
             } else {
+                // User intentionally stopped tracking, delete the document
                 await deleteDoc(userDocRef);
                 removeMarker(userId); 
-                // Removed: fitMapToBounds() here to prevent auto-zoom on self-stop
             }
         };
 
@@ -603,16 +637,16 @@
             const lng = position.coords.longitude;
             const pos = { lat, lng };
 
-            sendMessageBtn.disabled = false;
-            sendMessageBtn.classList.remove('hidden'); // Show send button when tracking starts
-
             // Update UI to final tracking state (Red Button)
+            isTracking = true;
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.classList.remove('hidden');
             toggleBtn.textContent = 'Stop Sharing Location';
             toggleBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500', 'bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
             toggleBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
 
 
-            // 1. Update own location in public Firestore (for OTHERS to see).
+            // 1. Update own location in public Firestore
             updateFirestoreLocation(lat, lng, true);
 
             // 2. Immediately update the local map marker for the current user 
@@ -630,6 +664,7 @@
 
         const geoError = (error) => {
             console.error("Geolocation Error:", error.message);
+            
             let errorMsg = `Location Error: ${error.message}. Please ensure location permissions are set to 'Allow' (not 'Ask Next Time') in your browser settings.`;
             if (error.code === 1) { 
                  errorMsg = "Location permission denied. Please check your device and browser settings to allow location access.";
@@ -638,12 +673,21 @@
             }
             showModal(errorMsg);
 
+            // Revert state if geolocation fails while attempting to start/restart
+            if (isTracking && watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
             isTracking = false;
             sendMessageBtn.disabled = true; 
-            sendMessageBtn.classList.add('hidden'); // Hide send button
+            sendMessageBtn.classList.add('hidden'); 
             toggleBtn.textContent = 'Start Sharing Location';
             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
+            
+            // CRITICAL: Since watchPosition failed, ensure the Firestore document is removed 
+            // if it was set to true (e.g., during an automatic restart attempt).
+            updateFirestoreLocation(0, 0, false); 
         };
 
         const startTracking = () => {
@@ -652,20 +696,28 @@
                 return;
             }
 
-            isMapCentered = true;
-
+            // Only set this flag if this is the *very first* manual start
+            if (!isTracking) {
+                 isMapCentered = true;
+            }
+           
             // Update UI to 'Waiting' state immediately (Yellow Button)
             isTracking = true;
             sendMessageBtn.disabled = true; 
-            sendMessageBtn.classList.remove('hidden'); // Show message controls while waiting
+            sendMessageBtn.classList.remove('hidden'); 
             toggleBtn.textContent = 'Waiting for location...';
             toggleBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500', 'bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500');
             toggleBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
 
-            // --- CRITICAL FIX FOR IOS RELIABILITY ---
+            // --- Geolocation setup ---
+            if (watchId !== null) {
+                // Clear any existing watch to prevent duplicates
+                 navigator.geolocation.clearWatch(watchId);
+            }
+            
             watchId = navigator.geolocation.watchPosition(geoSuccess, geoError, {
                 enableHighAccuracy: true,
-                maximumAge: 0, // IMPORTANT: Force fresh location reading for iOS
+                maximumAge: 0, 
                 timeout: 15000 
             });
         };
@@ -678,11 +730,12 @@
             
             isTracking = false;
             sendMessageBtn.disabled = true; 
-            sendMessageBtn.classList.add('hidden'); // Hide send button
+            sendMessageBtn.classList.add('hidden'); 
             toggleBtn.textContent = 'Start Sharing Location';
             toggleBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'focus:ring-red-500', 'bg-yellow-500', 'hover:bg-yellow-600', 'focus:ring-yellow-500');
             toggleBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'focus:ring-green-500');
 
+            // CRITICAL: Delete the document to remove persistence flag
             await updateFirestoreLocation(0, 0, false);
         };
 
@@ -726,8 +779,6 @@
             const colRef = collection(db, getPublicCollectionPath('user_locations'));
 
             onSnapshot(colRef, (snapshot) => {
-                // Removed: Logic for shouldFitBounds to stop automatic map fitting
-
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
                     const targetUserId = change.doc.id;
@@ -737,11 +788,18 @@
                     if (targetUserId === userId) {
                         // Handle changes for the current user only
                         if (change.type === "removed" || !data.isTracking) {
+                            // If the document was removed by stopTracking or logout, clean local state
+                            if (isTracking) {
+                                if (watchId !== null) {
+                                    navigator.geolocation.clearWatch(watchId);
+                                    watchId = null;
+                                }
+                                isTracking = false;
+                            }
                             removeMarker(targetUserId);
-                            // Removed: fitMapToBounds() when self-removal happens
                         }
-                        if (data.isTracking && data.message !== userMessage) {
-                            // Update local message state if someone else modified our doc (shouldn't happen)
+                        // Update local message state
+                        if (data.isTracking) {
                             userMessage = message;
                             messageInput.value = message;
                         }
@@ -757,9 +815,6 @@
                         }
                     }
                 });
-                
-                // Removed: The final call to fitMapToBounds()
-
             }, (error) => {
                 console.error("Error listening to Firestore location updates:", error);
             });
